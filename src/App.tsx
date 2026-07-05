@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, FormEvent } from 'react';
+import { useState, useEffect, useMemo, type FormEvent } from 'react';
 import { 
   AlertTriangle, CheckCircle, Users, Ship, ShieldAlert, 
   Settings, LayoutDashboard, Filter, ChevronRight, Anchor, Plus, X, UserPlus, LogOut, Search, Trash2,
@@ -10,17 +10,14 @@ import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 
-
-// --- FIREBASE INITIALIZATION ---
 const firebaseConfig = {
-  apiKey: 'AIzaSyBodyi-nGpL7TExhyxJQkL5boZxVzB-NKs',
-  authDomain: 'crew-change-follow-up.firebaseapp.com',
-  projectId: 'crew-change-follow-up',
-  storageBucket: 'crew-change-follow-up.firebasestorage.app',
-  messagingSenderId: '224379023927',
-  appId: '1:224379023927:web:4e6b7cd7dc87519b0685b2',
+  apiKey: "AIzaSyBodyi-nGpL7TExhyxJQkL5boZxVzB-NKs",
+  authDomain: "crew-change-follow-up.firebaseapp.com",
+  projectId: "crew-change-follow-up",
+  storageBucket: "crew-change-follow-up.firebasestorage.app",
+  messagingSenderId: "224379023927",
+  appId: "1:224379023927:web:4e6b7cd7dc87519b0685b2"
 };
-
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
