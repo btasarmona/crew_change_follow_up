@@ -1,26 +1,15 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, FormEvent } from 'react';
 import { 
   AlertTriangle, CheckCircle, Users, Ship, ShieldAlert, 
   Settings, LayoutDashboard, Filter, ChevronRight, Anchor, Plus, X, UserPlus, LogOut, Search, Trash2,
   FileWarning, LifeBuoy, Lock, UserCog, LogIn, Edit
 } from 'lucide-react';
 
-// --- FIREBASE IMPORTS ---
 import { initializeApp } from 'firebase/app';
-import {
-  getAuth,
-  signInWithCustomToken,
-  signInAnonymously,
-  onAuthStateChanged,
-} from 'firebase/auth';
-import {
-  getFirestore,
-  collection,
-  onSnapshot,
-  doc,
-  setDoc,
-  deleteDoc,
-} from 'firebase/firestore';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+
+
 
 // --- FIREBASE INITIALIZATION ---
 const firebaseConfig = {
@@ -32,9 +21,40 @@ const firebaseConfig = {
   appId: '1:224379023927:web:4e6b7cd7dc87519b0685b2',
 };
 
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+// --- TYPESCRIPT INTERFACES ---
+export interface ShipData {
+  id: string;
+  name: string;
+  flag: string;
+  minSafeManning: number;
+  cabinCapacity: number;
+  lsaCapacity: number;
+  color: string;
+}
+
+export interface CrewData {
+  id: string;
+  name: string;
+  competency: string;
+  status: string;
+  shipId: string | null;
+  rank: string | null;
+  contractStart: string | null;
+  contractEnd: string | null;
+  readinessDate: string | null;
+}
+
+export interface AppUserData {
+  id: string;
+  username: string;
+  password?: string;
+  role: string;
+}
 
 // --- CONSTANTS (Tanker Specific) ---
 const COMPETENCIES = [
@@ -47,7 +67,7 @@ const COMPETENCIES = [
 
 const RANKS = ['Master', 'C/O', '2/O', '3/O', 'C/E', '1/E', '2/E', '3/E', 'Pumpman', 'Bosun', 'AB', 'O/S', 'Oiler', 'Wiper', 'Cook', 'Messman', 'Cadet'];
 
-const RANK_COMPETENCY_MATRIX = {
+const RANK_COMPETENCY_MATRIX: Record<string, string[]> = {
   'Master': ['Master Mariner'],
   'C/O': ['Master Mariner', 'Chief Mate'],
   '2/O': ['Master Mariner', 'Chief Mate', 'OOW (Deck)'],
@@ -71,28 +91,29 @@ const today = new Date();
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [appUser, setAppUser] = useState(null); 
-  const [firebaseUser, setFirebaseUser] = useState(null);
+  const [appUser, setAppUser] = useState<AppUserData | null>(null); 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [firebaseUser, setFirebaseUser] = useState<any>(null);
   const [isDbLoading, setIsDbLoading] = useState(true);
 
-  const [ships, setShips] = useState([]);
-  const [crews, setCrews] = useState([]);
-  const [appUsers, setAppUsers] = useState([]);
-  const [selectedShipId, setSelectedShipId] = useState(null);
+  const [ships, setShips] = useState<ShipData[]>([]);
+  const [crews, setCrews] = useState<CrewData[]>([]);
+  const [appUsers, setAppUsers] = useState<AppUserData[]>([]);
+  const [selectedShipId, setSelectedShipId] = useState<string | null>(null);
 
   const [showShipModal, setShowShipModal] = useState(false);
-  const [editShipData, setEditShipData] = useState(null); 
+  const [editShipData, setEditShipData] = useState<ShipData | null>(null); 
   
   const [showCrewModal, setShowCrewModal] = useState(false);
-  const [editCrewData, setEditCrewData] = useState(null); 
+  const [editCrewData, setEditCrewData] = useState<CrewData | null>(null); 
 
   const [showUserModal, setShowUserModal] = useState(false); 
-  const [editUserData, setEditUserData] = useState(null); 
+  const [editUserData, setEditUserData] = useState<AppUserData | null>(null); 
   
-  const [assignCrewData, setAssignCrewData] = useState(null); 
-  const [signOffCrewData, setSignOffCrewData] = useState(null);
-  const [overrideWarning, setOverrideWarning] = useState(null); 
-  const [overlapWarning, setOverlapWarning] = useState(null);
+  const [assignCrewData, setAssignCrewData] = useState<CrewData | null>(null); 
+  const [signOffCrewData, setSignOffCrewData] = useState<CrewData | null>(null);
+  const [overrideWarning, setOverrideWarning] = useState<{message: string, onConfirm: () => void} | null>(null); 
+  const [overlapWarning, setOverlapWarning] = useState<{newCrew: CrewData, existingCrew: CrewData, onRelieve: () => void, onAdditional: () => void} | null>(null);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -116,7 +137,7 @@ export default function App() {
       appUsers: collection(db, 'appUsers')
     };
 
-    let dataLoadedFlags = { ships: false, crew: false, appUsers: false };
+    const dataLoadedFlags = { ships: false, crew: false, appUsers: false };
 
     const checkAllLoaded = () => {
       if (dataLoadedFlags.ships && dataLoadedFlags.crew && dataLoadedFlags.appUsers) {
@@ -125,21 +146,21 @@ export default function App() {
     };
 
     const unsubShips = onSnapshot(paths.ships, (snap) => {
-      setShips(snap.docs.map(d => d.data()));
+      setShips(snap.docs.map(d => d.data() as ShipData));
       dataLoadedFlags.ships = true; checkAllLoaded();
     }, (err) => console.error(err));
 
     const unsubCrew = onSnapshot(paths.crew, (snap) => {
-      setCrews(snap.docs.map(d => d.data()));
+      setCrews(snap.docs.map(d => d.data() as CrewData));
       dataLoadedFlags.crew = true; checkAllLoaded();
     }, (err) => console.error(err));
 
     const unsubUsers = onSnapshot(paths.appUsers, async (snap) => {
       if (snap.empty) {
-        // İlk Kurulum: Admin kullanıcısını oluştur
+        // Initial Admin creation
         await setDoc(doc(paths.appUsers, 'admin_user'), { id: 'admin_user', username: 'admin', password: 'Bt.admin.86!', role: 'admin' });
       } else {
-        setAppUsers(snap.docs.map(d => d.data()));
+        setAppUsers(snap.docs.map(d => d.data() as AppUserData));
       }
       dataLoadedFlags.appUsers = true; checkAllLoaded();
     }, (err) => console.error(err));
@@ -148,27 +169,33 @@ export default function App() {
   }, [firebaseUser]);
 
 
-  const calculateDaysRemaining = (endDateStr) => {
+  const calculateDaysRemaining = (endDateStr: string | null) => {
     if (!endDateStr) return 0;
-    const diffTime = new Date(endDateStr) - today;
+    const diffTime = new Date(endDateStr).getTime() - today.getTime();
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
-  const getContractColor = (daysRemaining) => {
+  const getContractColor = (daysRemaining: number) => {
     if (daysRemaining < 0) return 'bg-red-500';
     if (daysRemaining < 15) return 'bg-orange-500';
     if (daysRemaining < 45) return 'bg-yellow-400';
     return 'bg-green-500';
   };
 
-  const getStatusText = (daysRemaining) => {
+  const getStatusText = (daysRemaining: number) => {
     if (daysRemaining < 0) return `Expired ${Math.abs(daysRemaining)} days ago`;
     if (daysRemaining === 0) return `Expires today`;
     return `${daysRemaining} days left`;
   };
 
   const systemAlerts = useMemo(() => {
-    const alerts = { expiredContracts: [], manning: [], cabin: [], lsa: [] };
+    const alerts = { 
+      expiredContracts: [] as {crewName: string, rank: string | null, shipName: string}[], 
+      manning: [] as {shipName: string, current: number, min: number}[], 
+      cabin: [] as {shipName: string, current: number, max: number}[], 
+      lsa: [] as {shipName: string, current: number, max: number}[] 
+    };
+    
     ships.forEach(ship => {
       const onboard = crews.filter(c => c.shipId === ship.id && c.status === 'onboard');
       if (onboard.length < ship.minSafeManning) alerts.manning.push({ shipName: ship.name, current: onboard.length, min: ship.minSafeManning });
@@ -179,26 +206,26 @@ export default function App() {
     return alerts;
   }, [ships, crews]);
 
-  const checkCompetencyMatch = (competency, rank) => (RANK_COMPETENCY_MATRIX[rank] || []).includes(competency);
+  const checkCompetencyMatch = (competency: string, rank: string) => (RANK_COMPETENCY_MATRIX[rank] || []).includes(competency);
 
-  const handleAddShipToDb = async (newShipData) => {
+  const handleAddShipToDb = async (newShipData: Partial<ShipData>) => {
     const newId = `ship_${Date.now()}`;
     const ship = { ...newShipData, id: newId };
     await setDoc(doc(db, 'ships', newId), ship);
   };
 
-  const handleUpdateShipToDb = async (shipId, updatedData) => {
+  const handleUpdateShipToDb = async (shipId: string, updatedData: Partial<ShipData>) => {
     await setDoc(doc(db, 'ships', shipId), updatedData, { merge: true });
   };
 
-  const handleDeleteShipDb = async (id, name) => {
+  const handleDeleteShipDb = async (id: string, name: string) => {
     if(window.confirm(`Are you sure you want to permanently delete vessel '${name}'?\nWarning: Personnel onboard will lose their vessel assignment.`)) {
       await deleteDoc(doc(db, 'ships', id));
     }
   };
 
-  const attemptAssignment = (newCrewData, actionType = 'add_or_update') => {
-    const executeAssignment = async (isRelieve = false, existingCrewToRelieveId = null) => {
+  const attemptAssignment = (newCrewData: CrewData) => {
+    const executeAssignment = async (isRelieve = false, existingCrewToRelieveId: string | null = null) => {
       const targetCrewId = newCrewData.id || `crew_${Date.now()}`;
       const finalCrewData = { ...newCrewData, id: targetCrewId };
 
@@ -229,7 +256,7 @@ export default function App() {
       } else { executeAssignment(false); }
     };
 
-    if (!checkCompetencyMatch(newCrewData.competency, newCrewData.rank)) {
+    if (newCrewData.rank && !checkCompetencyMatch(newCrewData.competency, newCrewData.rank)) {
       setOverrideWarning({
         message: `The competency of ${newCrewData.name} (${newCrewData.competency}) does not match the selected rank (${newCrewData.rank}). Do you still want to proceed?`,
         onConfirm: () => { setOverrideWarning(null); checkOverlap(); }
@@ -237,7 +264,7 @@ export default function App() {
     } else { checkOverlap(); }
   };
 
-  const processSignOffDb = async (crewId, rejoinDate) => {
+  const processSignOffDb = async (crewId: string, rejoinDate: string | null) => {
     const c = crews.find(cr => cr.id === crewId);
     if(c) {
       await setDoc(doc(db, 'crew', crewId), { 
@@ -246,23 +273,23 @@ export default function App() {
     }
   };
 
-  const handleDeleteCrewDb = async (id, name) => {
+  const handleDeleteCrewDb = async (id: string, name: string) => {
     if(window.confirm(`Are you sure you want to permanently delete ${name} from the database?`)) {
       await deleteDoc(doc(db, 'crew', id));
     }
   };
 
-  const handleAddUserToDb = async (userData) => {
+  const handleAddUserToDb = async (userData: Partial<AppUserData>) => {
     const newId = `user_${Date.now()}`;
     const user = { ...userData, id: newId };
     await setDoc(doc(db, 'appUsers', newId), user);
   };
 
-  const handleUpdateUserToDb = async (userId, updatedData) => {
+  const handleUpdateUserToDb = async (userId: string, updatedData: Partial<AppUserData>) => {
     await setDoc(doc(db, 'appUsers', userId), updatedData, { merge: true });
   };
 
-  const handleDeleteUserDb = async (id, username) => {
+  const handleDeleteUserDb = async (id: string, username: string) => {
     if (appUsers.length <= 1) {
       alert("Cannot delete the last remaining user.");
       return;
@@ -279,11 +306,11 @@ export default function App() {
   }
 
   if (!appUser) {
-    const handleLogin = (e) => {
+    const handleLogin = (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
-      const fd = new FormData(e.target);
-      const u = fd.get('username');
-      const p = fd.get('password');
+      const fd = new FormData(e.currentTarget);
+      const u = fd.get('username') as string;
+      const p = fd.get('password') as string;
       const foundUser = appUsers.find(user => user.username === u && user.password === p);
       
       if (foundUser) setAppUser(foundUser);
@@ -370,9 +397,9 @@ export default function App() {
     const isEarlySignOff = daysLeft > 30;
     const contractStatusMsg = daysLeft < 0 ? `Their contract expired ${Math.abs(daysLeft)} days ago.` : `They have ${daysLeft} days left on their contract.`;
 
-    const handleSignOff = (e) => {
+    const handleSignOff = (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
-      const rejoinDate = new FormData(e.target).get('rejoinDate');
+      const rejoinDate = new FormData(e.currentTarget).get('rejoinDate') as string | null;
       processSignOffDb(signOffCrewData.id, rejoinDate);
       setSignOffCrewData(null);
     };
@@ -407,16 +434,19 @@ export default function App() {
     if (!showShipModal && !editShipData) return null;
     const isEditing = !!editShipData;
     
-    const onSubmit = (e) => {
+    const onSubmit = (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
-      const fd = new FormData(e.target);
-      const shipData = {
-        name: fd.get('name'), flag: fd.get('flag'), 
-        minSafeManning: parseInt(fd.get('minSafeManning')), cabinCapacity: parseInt(fd.get('cabinCapacity')), lsaCapacity: parseInt(fd.get('lsaCapacity')), 
+      const fd = new FormData(e.currentTarget);
+      const shipData: Partial<ShipData> = {
+        name: fd.get('name') as string, 
+        flag: fd.get('flag') as string, 
+        minSafeManning: parseInt(fd.get('minSafeManning') as string), 
+        cabinCapacity: parseInt(fd.get('cabinCapacity') as string), 
+        lsaCapacity: parseInt(fd.get('lsaCapacity') as string), 
         color: editShipData ? editShipData.color : 'bg-blue-100'
       };
       
-      if (isEditing) {
+      if (isEditing && editShipData) {
         handleUpdateShipToDb(editShipData.id, shipData);
         setEditShipData(null);
       } else {
@@ -458,26 +488,25 @@ export default function App() {
       else setStatusOption('onleave');
     }, [editCrewData, showCrewModal]);
 
-    const onSubmit = (e) => {
+    const onSubmit = (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
-      const fd = new FormData(e.target);
-      const crewData = {
-        name: fd.get('name'), competency: fd.get('competency'), status: statusOption,
-        shipId: statusOption === 'onboard' ? fd.get('shipId') : null,
-        rank: statusOption === 'onboard' ? fd.get('rank') : null,
-        contractStart: statusOption === 'onboard' ? new Date(fd.get('contractStart')).toISOString() : null,
-        contractEnd: statusOption === 'onboard' ? new Date(fd.get('contractEnd')).toISOString() : null,
-        readinessDate: statusOption === 'onleave' && fd.get('readinessDate') ? new Date(fd.get('readinessDate')).toISOString() : null,
+      const fd = new FormData(e.currentTarget);
+      const crewData: CrewData = {
+        id: editCrewData ? editCrewData.id : `crew_${Date.now()}`,
+        name: fd.get('name') as string, 
+        competency: fd.get('competency') as string, 
+        status: statusOption,
+        shipId: statusOption === 'onboard' ? fd.get('shipId') as string : null,
+        rank: statusOption === 'onboard' ? fd.get('rank') as string : null,
+        contractStart: statusOption === 'onboard' && fd.get('contractStart') ? new Date(fd.get('contractStart') as string).toISOString() : null,
+        contractEnd: statusOption === 'onboard' && fd.get('contractEnd') ? new Date(fd.get('contractEnd') as string).toISOString() : null,
+        readinessDate: statusOption === 'onleave' && fd.get('readinessDate') ? new Date(fd.get('readinessDate') as string).toISOString() : null,
       };
 
-      if (isEditing) {
-        attemptAssignment({ ...crewData, id: editCrewData.id }, 'update');
-      } else {
-        attemptAssignment(crewData, 'add');
-      }
+      attemptAssignment(crewData);
     };
 
-    const formatDateForInput = (isoString) => isoString ? isoString.split('T')[0] : '';
+    const formatDateForInput = (isoString?: string | null) => isoString ? isoString.split('T')[0] : '';
 
     return (
       <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
@@ -494,8 +523,8 @@ export default function App() {
             {statusOption === 'onboard' && (
               <>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><label className="block text-sm font-bold text-gray-700">Vessel</label><select name="shipId" defaultValue={editCrewData?.shipId} required className="w-full border p-2 rounded">{ships.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
-                  <div><label className="block text-sm font-bold text-gray-700">Rank</label><select name="rank" defaultValue={editCrewData?.rank} required className="w-full border p-2 rounded">{RANKS.map(r => <option key={r} value={r}>{r}</option>)}</select></div>
+                  <div><label className="block text-sm font-bold text-gray-700">Vessel</label><select name="shipId" defaultValue={editCrewData?.shipId || undefined} required className="w-full border p-2 rounded">{ships.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+                  <div><label className="block text-sm font-bold text-gray-700">Rank</label><select name="rank" defaultValue={editCrewData?.rank || undefined} required className="w-full border p-2 rounded">{RANKS.map(r => <option key={r} value={r}>{r}</option>)}</select></div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><label className="block text-sm font-bold text-gray-700">Contract Start</label><input name="contractStart" defaultValue={formatDateForInput(editCrewData?.contractStart)} type="date" required className="w-full border p-2 rounded" /></div>
@@ -512,13 +541,18 @@ export default function App() {
 
   const AssignCrewModal = () => {
     if (!assignCrewData) return null;
-    const onSubmit = (e) => {
+    const onSubmit = (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
-      const fd = new FormData(e.target);
+      const fd = new FormData(e.currentTarget);
       attemptAssignment({
-        ...assignCrewData, status: 'onboard', shipId: fd.get('shipId'), rank: fd.get('rank'),
-        contractStart: new Date(fd.get('contractStart')).toISOString(), contractEnd: new Date(fd.get('contractEnd')).toISOString(), readinessDate: null
-      }, 'update');
+        ...assignCrewData, 
+        status: 'onboard', 
+        shipId: fd.get('shipId') as string, 
+        rank: fd.get('rank') as string,
+        contractStart: new Date(fd.get('contractStart') as string).toISOString(), 
+        contractEnd: new Date(fd.get('contractEnd') as string).toISOString(), 
+        readinessDate: null
+      });
     };
     return (
       <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
@@ -544,12 +578,16 @@ export default function App() {
     if (!showUserModal && !editUserData) return null;
     const isEditing = !!editUserData;
     
-    const onSubmit = (e) => {
+    const onSubmit = (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
-      const fd = new FormData(e.target);
-      const userData = { username: fd.get('username'), password: fd.get('password'), role: fd.get('role') };
+      const fd = new FormData(e.currentTarget);
+      const userData: Partial<AppUserData> = { 
+        username: fd.get('username') as string, 
+        password: fd.get('password') as string, 
+        role: fd.get('role') as string 
+      };
       
-      if (isEditing) {
+      if (isEditing && editUserData) {
         handleUpdateUserToDb(editUserData.id, userData);
         setEditUserData(null);
       } else {
@@ -594,7 +632,7 @@ export default function App() {
       .sort((a, b) => {
         if (!a.readinessDate) return 1;
         if (!b.readinessDate) return -1;
-        return new Date(a.readinessDate) - new Date(b.readinessDate);
+        return new Date(a.readinessDate).getTime() - new Date(b.readinessDate).getTime();
       });
 
     return (
