@@ -2,12 +2,14 @@ import { useState, useEffect, useMemo, type FormEvent } from 'react';
 import { 
   AlertTriangle, CheckCircle, Users, Ship, ShieldAlert, 
   Settings, LayoutDashboard, Filter, ChevronRight, Anchor, Plus, X, UserPlus, LogOut, Search, Trash2,
-  FileWarning, LifeBuoy, Lock, UserCog, LogIn, Edit
+  FileWarning, LifeBuoy, Lock, UserCog, LogIn, Edit, TableProperties, Check
 } from 'lucide-react';
 
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+
+
 
 
 const firebaseConfig = {
@@ -22,6 +24,25 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+// @ts-ignore
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+// --- DİNAMİK VERİTABANI YOLLARI ---
+// (Canvas ortamıyla yerel ortamı uyumlu hale getiren yardımcı fonksiyonlar)
+const getCollectionRef = (colName: string) => {
+  // @ts-ignore
+  return typeof __app_id !== 'undefined' 
+    ? collection(db, 'artifacts', appId, 'public', 'data', colName)
+    : collection(db, colName);
+};
+
+const getDocRef = (colName: string, docId: string) => {
+  // @ts-ignore
+  return typeof __app_id !== 'undefined'
+    ? doc(db, 'artifacts', appId, 'public', 'data', colName, docId)
+    : doc(db, colName, docId);
+};
 
 // --- TYPESCRIPT INTERFACES ---
 export interface ShipData {
@@ -44,6 +65,7 @@ export interface CrewData {
   contractStart: string | null;
   contractEnd: string | null;
   readinessDate: string | null;
+  isProbation?: boolean;
 }
 
 export interface AppUserData {
@@ -53,18 +75,8 @@ export interface AppUserData {
   role: string;
 }
 
-// --- CONSTANTS (Tanker Specific) ---
-const COMPETENCIES = [
-  'Master Mariner', 'Chief Mate', 'OOW (Deck)',
-  'Chief Engineer', 'Second Engineer', 'OOW (Engine)',
-  'Pumpman', 'Rating (Deck)', 'AB', 'O/S', 
-  'Rating (Engine)', 'Oiler', 'Wiper',
-  'Ship\'s Cook', 'Cadet (Deck)', 'Cadet (Engine)'
-];
-
-const RANKS = ['Master', 'C/O', '2/O', '3/O', 'C/E', '1/E', '2/E', '3/E', 'Pumpman', 'Bosun', 'AB', 'O/S', 'Oiler', 'Wiper', 'Cook', 'Messman', 'Cadet'];
-
-const RANK_COMPETENCY_MATRIX: Record<string, string[]> = {
+// --- DEFAULT MATRIX (Seeding for Database) ---
+const DEFAULT_RANK_COMPETENCY_MATRIX: Record<string, string[]> = {
   'Master': ['Master Mariner'],
   'C/O': ['Master Mariner', 'Chief Mate'],
   '2/O': ['Master Mariner', 'Chief Mate', 'OOW (Deck)'],
@@ -96,6 +108,16 @@ export default function App() {
   const [ships, setShips] = useState<ShipData[]>([]);
   const [crews, setCrews] = useState<CrewData[]>([]);
   const [appUsers, setAppUsers] = useState<AppUserData[]>([]);
+  
+  const [rankMatrix, setRankMatrix] = useState<Record<string, string[]>>({});
+  
+  const RANKS = useMemo(() => Object.keys(rankMatrix), [rankMatrix]);
+  const COMPETENCIES = useMemo(() => {
+    const comps = new Set<string>();
+    Object.values(rankMatrix).forEach(list => list.forEach(c => comps.add(c)));
+    return Array.from(comps).sort();
+  }, [rankMatrix]);
+
   const [selectedShipId, setSelectedShipId] = useState<string | null>(null);
 
   const [showShipModal, setShowShipModal] = useState(false);
@@ -115,7 +137,13 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        await signInAnonymously(auth);
+        // @ts-ignore
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          // @ts-ignore
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
       } catch (err) {
         console.error("Auth Error:", err);
       }
@@ -129,15 +157,16 @@ export default function App() {
     if (!firebaseUser) return;
 
     const paths = {
-      ships: collection(db, 'ships'),
-      crew: collection(db, 'crew'),
-      appUsers: collection(db, 'appUsers')
+      ships: getCollectionRef('ships'),
+      crew: getCollectionRef('crew'),
+      appUsers: getCollectionRef('appUsers'),
+      settings: getCollectionRef('settings')
     };
 
-    const dataLoadedFlags = { ships: false, crew: false, appUsers: false };
+    const dataLoadedFlags = { ships: false, crew: false, appUsers: false, settings: false };
 
     const checkAllLoaded = () => {
-      if (dataLoadedFlags.ships && dataLoadedFlags.crew && dataLoadedFlags.appUsers) {
+      if (dataLoadedFlags.ships && dataLoadedFlags.crew && dataLoadedFlags.appUsers && dataLoadedFlags.settings) {
         setIsDbLoading(false);
       }
     };
@@ -154,33 +183,41 @@ export default function App() {
 
     const unsubUsers = onSnapshot(paths.appUsers, async (snap) => {
       if (snap.empty) {
-        // Initial Admin creation
-        await setDoc(doc(paths.appUsers, 'admin_user'), { id: 'admin_user', username: 'admin', password: 'Bt.admin.86!', role: 'admin' });
+        await setDoc(getDocRef('appUsers', 'admin_user'), { id: 'admin_user', username: 'admin', password: 'Bt.admin.86!', role: 'admin' });
       } else {
         setAppUsers(snap.docs.map(d => d.data() as AppUserData));
       }
       dataLoadedFlags.appUsers = true; checkAllLoaded();
     }, (err) => console.error(err));
 
-    return () => { unsubShips(); unsubCrew(); unsubUsers(); };
+    const unsubSettings = onSnapshot(paths.settings, async (snap) => {
+      const matrixDoc = snap.docs.find(d => d.id === 'rank_matrix');
+      if (!matrixDoc) {
+        await setDoc(getDocRef('settings', 'rank_matrix'), { data: DEFAULT_RANK_COMPETENCY_MATRIX });
+      } else {
+        setRankMatrix(matrixDoc.data().data);
+      }
+      dataLoadedFlags.settings = true; checkAllLoaded();
+    }, (err) => console.error(err));
+
+    return () => { unsubShips(); unsubCrew(); unsubUsers(); unsubSettings(); };
   }, [firebaseUser]);
 
-
-  const calculateDaysRemaining = (endDateStr: string | null) => {
-    if (!endDateStr) return 0;
-    const diffTime = new Date(endDateStr).getTime() - today.getTime();
+  const calculateDaysRemaining = (dateStr: string | null) => {
+    if (!dateStr) return 0;
+    const diffTime = new Date(dateStr).getTime() - today.getTime();
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
   const getContractColor = (daysRemaining: number) => {
-    if (daysRemaining < 0) return 'bg-red-500';
-    if (daysRemaining < 15) return 'bg-orange-500';
-    if (daysRemaining < 45) return 'bg-yellow-400';
-    return 'bg-green-500';
+    if (daysRemaining < 0) return { bg: 'bg-red-500', border: 'border-red-500', text: 'text-red-700', light: 'bg-red-50' };
+    if (daysRemaining < 15) return { bg: 'bg-orange-500', border: 'border-orange-500', text: 'text-orange-700', light: 'bg-orange-50' };
+    if (daysRemaining < 45) return { bg: 'bg-yellow-400', border: 'border-yellow-400', text: 'text-yellow-700', light: 'bg-yellow-50' };
+    return { bg: 'bg-green-500', border: 'border-green-500', text: 'text-green-700', light: 'bg-green-50' };
   };
 
   const getStatusText = (daysRemaining: number) => {
-    if (daysRemaining < 0) return `Expired ${Math.abs(daysRemaining)} days ago`;
+    if (daysRemaining < 0) return `Expired ${Math.abs(daysRemaining)} d`;
     if (daysRemaining === 0) return `Expires today`;
     return `${daysRemaining} days left`;
   };
@@ -203,22 +240,20 @@ export default function App() {
     return alerts;
   }, [ships, crews]);
 
-  const checkCompetencyMatch = (competency: string, rank: string) => (RANK_COMPETENCY_MATRIX[rank] || []).includes(competency);
+  const checkCompetencyMatch = (competency: string, rank: string) => (rankMatrix[rank] || []).includes(competency);
 
-  const handleAddShipToDb = async (newShipData: Partial<ShipData>) => {
-    const newId = `ship_${Date.now()}`;
-    const ship = { ...newShipData, id: newId };
-    await setDoc(doc(db, 'ships', newId), ship);
+  const handleUpdateMatrixToDb = async (newMatrix: Record<string, string[]>) => { 
+    await setDoc(getDocRef('settings', 'rank_matrix'), { data: newMatrix }, { merge: true }); 
   };
-
-  const handleUpdateShipToDb = async (shipId: string, updatedData: Partial<ShipData>) => {
-    await setDoc(doc(db, 'ships', shipId), updatedData, { merge: true });
+  const handleAddShipToDb = async (newShipData: Partial<ShipData>) => { 
+    const newId = `ship_${Date.now()}`; 
+    await setDoc(getDocRef('ships', newId), { ...newShipData, id: newId }); 
   };
-
-  const handleDeleteShipDb = async (id: string, name: string) => {
-    if(window.confirm(`Are you sure you want to permanently delete vessel '${name}'?\nWarning: Personnel onboard will lose their vessel assignment.`)) {
-      await deleteDoc(doc(db, 'ships', id));
-    }
+  const handleUpdateShipToDb = async (shipId: string, updatedData: Partial<ShipData>) => { 
+    await setDoc(getDocRef('ships', shipId), updatedData, { merge: true }); 
+  };
+  const handleDeleteShipDb = async (id: string, name: string) => { 
+    if(window.confirm(`Delete vessel '${name}'?`)) await deleteDoc(getDocRef('ships', id)); 
   };
 
   const attemptAssignment = (newCrewData: CrewData) => {
@@ -227,19 +262,15 @@ export default function App() {
       const finalCrewData = { ...newCrewData, id: targetCrewId };
 
       if (isRelieve && existingCrewToRelieveId) {
-        const existingCrewRef = doc(db, 'crew', existingCrewToRelieveId);
+        const existingCrewRef = getDocRef('crew', existingCrewToRelieveId);
         const relievedData = crews.find(c => c.id === existingCrewToRelieveId);
         if (relievedData) {
-          await setDoc(existingCrewRef, { 
-            ...relievedData, status: 'onleave', shipId: null, rank: null, contractStart: null, contractEnd: null, readinessDate: today.toISOString() 
-          });
+          await setDoc(existingCrewRef, { ...relievedData, status: 'onleave', shipId: null, rank: null, contractStart: null, contractEnd: null, readinessDate: today.toISOString() });
         }
       }
 
-      await setDoc(doc(db, 'crew', targetCrewId), finalCrewData, { merge: true });
-      setShowCrewModal(false);
-      setEditCrewData(null);
-      setAssignCrewData(null);
+      await setDoc(getDocRef('crew', targetCrewId), finalCrewData, { merge: true });
+      setShowCrewModal(false); setEditCrewData(null); setAssignCrewData(null);
     };
 
     const checkOverlap = () => {
@@ -254,89 +285,48 @@ export default function App() {
     };
 
     if (newCrewData.rank && !checkCompetencyMatch(newCrewData.competency, newCrewData.rank)) {
-      setOverrideWarning({
-        message: `The competency of ${newCrewData.name} (${newCrewData.competency}) does not match the selected rank (${newCrewData.rank}). Do you still want to proceed?`,
-        onConfirm: () => { setOverrideWarning(null); checkOverlap(); }
-      });
+      setOverrideWarning({ message: `Competency (${newCrewData.competency}) does not match rank (${newCrewData.rank}). Proceed?`, onConfirm: () => { setOverrideWarning(null); checkOverlap(); } });
     } else { checkOverlap(); }
   };
 
   const processSignOffDb = async (crewId: string, rejoinDate: string | null) => {
     const c = crews.find(cr => cr.id === crewId);
-    if(c) {
-      await setDoc(doc(db, 'crew', crewId), { 
-        ...c, status: 'onleave', shipId: null, rank: null, contractStart: null, contractEnd: null, readinessDate: rejoinDate ? new Date(rejoinDate).toISOString() : null
-      });
-    }
+    if(c) await setDoc(getDocRef('crew', crewId), { ...c, status: 'onleave', shipId: null, rank: null, contractStart: null, contractEnd: null, readinessDate: rejoinDate ? new Date(rejoinDate).toISOString() : null });
   };
 
-  const handleDeleteCrewDb = async (id: string, name: string) => {
-    if(window.confirm(`Are you sure you want to permanently delete ${name} from the database?`)) {
-      await deleteDoc(doc(db, 'crew', id));
-    }
+  const handleDeleteCrewDb = async (id: string, name: string) => { 
+    if(window.confirm(`Delete ${name} from database?`)) await deleteDoc(getDocRef('crew', id)); 
+  };
+  const handleAddUserToDb = async (userData: Partial<AppUserData>) => { 
+    const newId = `user_${Date.now()}`; 
+    await setDoc(getDocRef('appUsers', newId), { ...userData, id: newId }); 
+  };
+  const handleUpdateUserToDb = async (userId: string, updatedData: Partial<AppUserData>) => { 
+    await setDoc(getDocRef('appUsers', userId), updatedData, { merge: true }); 
+  };
+  const handleDeleteUserDb = async (id: string, username: string) => { 
+    if (appUsers.length <= 1) return alert("Cannot delete the last remaining user."); 
+    if (window.confirm(`Delete user '${username}'?`)) await deleteDoc(getDocRef('appUsers', id)); 
   };
 
-  const handleAddUserToDb = async (userData: Partial<AppUserData>) => {
-    const newId = `user_${Date.now()}`;
-    const user = { ...userData, id: newId };
-    await setDoc(doc(db, 'appUsers', newId), user);
-  };
-
-  const handleUpdateUserToDb = async (userId: string, updatedData: Partial<AppUserData>) => {
-    await setDoc(doc(db, 'appUsers', userId), updatedData, { merge: true });
-  };
-
-  const handleDeleteUserDb = async (id: string, username: string) => {
-    if (appUsers.length <= 1) {
-      alert("Cannot delete the last remaining user.");
-      return;
-    }
-    if (window.confirm(`Delete user access for '${username}'?`)) {
-      await deleteDoc(doc(db, 'appUsers', id));
-    }
-  };
-
-
-  // --- LOGIN SCREEN ---
-  if (isDbLoading) {
-    return <div className="h-screen w-full flex items-center justify-center bg-gray-900 text-white font-bold">Connecting to Secure Database...</div>;
-  }
+  if (isDbLoading) return <div className="h-screen w-full flex items-center justify-center bg-gray-900 text-white font-bold">Connecting to Secure Database...</div>;
 
   if (!appUser) {
     const handleLogin = (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       const fd = new FormData(e.currentTarget);
-      const u = fd.get('username') as string;
-      const p = fd.get('password') as string;
-      const foundUser = appUsers.find(user => user.username === u && user.password === p);
-      
-      if (foundUser) setAppUser(foundUser);
-      else alert('Invalid username or password.');
+      const foundUser = appUsers.find(user => user.username === fd.get('username') && user.password === fd.get('password'));
+      if (foundUser) setAppUser(foundUser); else alert('Invalid username or password.');
     };
-
     return (
       <div className="h-screen w-full flex items-center justify-center bg-slate-800">
         <form onSubmit={handleLogin} className="bg-white p-8 rounded-lg shadow-2xl w-full max-w-sm border-t-8 border-blue-600">
           <div className="flex justify-center mb-6"><Anchor size={48} className="text-blue-600" /></div>
           <h1 className="text-2xl font-bold text-center text-gray-800 mb-6 tracking-wide">CREW MASTER PRO</h1>
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1">Username</label>
-              <div className="relative">
-                <UserCog size={18} className="absolute left-3 top-3 text-gray-400"/>
-                <input name="username" required className="w-full pl-10 pr-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Enter username" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1">Password</label>
-              <div className="relative">
-                <Lock size={18} className="absolute left-3 top-3 text-gray-400"/>
-                <input name="password" type="password" required className="w-full pl-10 pr-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Enter password" />
-              </div>
-            </div>
-            <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition flex items-center justify-center mt-2">
-              <LogIn className="mr-2" size={18} /> Secure Login
-            </button>
+            <div><label className="block text-sm font-bold text-gray-700 mb-1">Username</label><div className="relative"><UserCog size={18} className="absolute left-3 top-3 text-gray-400"/><input name="username" required className="w-full pl-10 pr-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none" /></div></div>
+            <div><label className="block text-sm font-bold text-gray-700 mb-1">Password</label><div className="relative"><Lock size={18} className="absolute left-3 top-3 text-gray-400"/><input name="password" type="password" required className="w-full pl-10 pr-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none" /></div></div>
+            <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition flex items-center justify-center mt-2"><LogIn className="mr-2" size={18} /> Secure Login</button>
           </div>
         </form>
       </div>
@@ -352,10 +342,7 @@ export default function App() {
         <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 border-l-8 border-orange-500">
           <div className="flex items-center text-orange-600 mb-4"><AlertTriangle size={32} className="mr-3" /><h2 className="text-xl font-bold">Competency Warning</h2></div>
           <p className="text-gray-700 mb-6">{overrideWarning.message}</p>
-          <div className="flex justify-end space-x-3">
-            <button onClick={() => setOverrideWarning(null)} className="px-4 py-2 border rounded text-gray-600 hover:bg-gray-100">Cancel</button>
-            <button onClick={overrideWarning.onConfirm} className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 font-bold">Confirm & Proceed</button>
-          </div>
+          <div className="flex justify-end space-x-3"><button onClick={() => setOverrideWarning(null)} className="px-4 py-2 border rounded">Cancel</button><button onClick={overrideWarning.onConfirm} className="px-4 py-2 bg-orange-500 text-white rounded font-bold">Proceed</button></div>
         </div>
       </div>
     );
@@ -364,24 +351,20 @@ export default function App() {
   const HandoverModal = () => {
     if (!overlapWarning) return null;
     const { newCrew, existingCrew, onRelieve, onAdditional } = overlapWarning;
-    const shipName = ships.find(s => s.id === newCrew.shipId)?.name;
-
     return (
       <div className="fixed inset-0 bg-black/60 z-[80] flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6 border-l-8 border-blue-500">
           <div className="flex items-center text-blue-700 mb-4"><Users size={32} className="mr-3" /><h2 className="text-xl font-bold">Rank Overlap Detected</h2></div>
-          <p className="text-gray-700 mb-4">
-            <strong>{existingCrew.name}</strong> is currently assigned as <strong>{newCrew.rank}</strong> onboard <strong>{shipName}</strong>.
-          </p>
+          <p className="text-gray-700 mb-4"><strong>{existingCrew.name}</strong> is currently assigned as <strong>{newCrew.rank}</strong>.</p>
           <div className="bg-blue-50 p-3 rounded mb-6 text-sm text-blue-800">
             How would you like to proceed with this assignment? <br/><br/>
-            - <strong>Relieve:</strong> Signs off the current personnel and assigns the new one.<br/>
-            - <strong>Additional:</strong> Keeps current personnel onboard, assigns the new one simultaneously (Handover/Parallel).
+            - <strong>Relieve Immediately:</strong> Signs off current crew right now.<br/>
+            - <strong>Plan as Relief / Additional:</strong> Keeps current crew, adds new crew to timeline for parallel or future handover.
           </div>
           <div className="flex flex-col sm:flex-row justify-end gap-3">
-            <button onClick={() => setOverlapWarning(null)} className="px-4 py-2 border rounded text-gray-600 hover:bg-gray-100">Cancel</button>
-            <button onClick={onAdditional} className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 font-bold flex items-center justify-center">Assign as Additional</button>
-            <button onClick={onRelieve} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-bold flex items-center justify-center">Relieve Existing Crew</button>
+            <button onClick={() => setOverlapWarning(null)} className="px-4 py-2 border rounded">Cancel</button>
+            <button onClick={onAdditional} className="px-4 py-2 bg-gray-600 text-white rounded font-bold">Plan / Additional</button>
+            <button onClick={onRelieve} className="px-4 py-2 bg-blue-600 text-white rounded font-bold">Relieve Immediately</button>
           </div>
         </div>
       </div>
@@ -392,98 +375,62 @@ export default function App() {
     if (!signOffCrewData) return null;
     const daysLeft = calculateDaysRemaining(signOffCrewData.contractEnd);
     const isEarlySignOff = daysLeft > 30;
-    const contractStatusMsg = daysLeft < 0 ? `Their contract expired ${Math.abs(daysLeft)} days ago.` : `They have ${daysLeft} days left on their contract.`;
-
     const handleSignOff = (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
-      const rejoinDate = new FormData(e.currentTarget).get('rejoinDate') as string | null;
-      processSignOffDb(signOffCrewData.id, rejoinDate);
+      processSignOffDb(signOffCrewData.id, new FormData(e.currentTarget).get('rejoinDate') as string | null);
       setSignOffCrewData(null);
     };
-
     return (
       <div className="fixed inset-0 bg-black/60 z-[90] flex items-center justify-center p-4">
         <form onSubmit={handleSignOff} className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 border-l-8 border-red-500">
           <div className="flex items-center text-red-600 mb-4"><LogOut size={32} className="mr-3" /><h2 className="text-xl font-bold">Sign-Off Personnel</h2></div>
-          <p className="text-gray-800 font-medium mb-1">Are you sure you want to sign-off <strong>{signOffCrewData.name}</strong>?</p>
-          <p className={`text-sm mb-4 font-semibold ${daysLeft < 0 ? 'text-red-600' : 'text-blue-600'}`}>{contractStatusMsg}</p>
+          <p className="text-gray-800 font-medium mb-1">Sign-off <strong>{signOffCrewData.name}</strong>?</p>
+          <p className={`text-sm mb-4 font-semibold ${daysLeft < 0 ? 'text-red-600' : 'text-blue-600'}`}>{daysLeft < 0 ? `Contract expired ${Math.abs(daysLeft)} days ago.` : `He has ${daysLeft} days left.`}</p>
           {isEarlySignOff && (
-            <div className="bg-orange-50 border border-orange-200 p-3 mb-4 rounded text-sm text-orange-800 shadow-sm flex items-start">
-              <AlertTriangle className="mr-2 shrink-0 mt-0.5 text-orange-600" size={16} />
-              <div><strong>Early Sign-Off Notice:</strong><br/>Crew member still has a valid contract. Please be reminded that early sign-off or resignation must be properly justified.</div>
-            </div>
+            <div className="bg-orange-50 border border-orange-200 p-3 mb-4 rounded text-sm text-orange-800 shadow-sm flex items-start"><AlertTriangle className="mr-2 shrink-0 mt-0.5 text-orange-600" size={16} /><div><strong>Early Sign-Off Notice:</strong><br/>Crew still has valid contract. Early sign-off must be properly justified.</div></div>
           )}
-          <div className="bg-gray-50 p-4 rounded-lg mb-6 border">
-            <label className="block text-sm font-bold text-gray-700 mb-2">Expected rejoin date (Optional):</label>
-            <input name="rejoinDate" type="date" className="w-full border p-2 rounded focus:ring-blue-500 focus:border-blue-500" />
-          </div>
-          <div className="flex justify-end space-x-3">
-            <button type="button" onClick={() => setSignOffCrewData(null)} className="px-4 py-2 border rounded text-gray-600 hover:bg-gray-100 font-semibold">Cancel</button>
-            <button type="submit" className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 font-bold">Confirm Sign-Off</button>
-          </div>
+          <div className="bg-gray-50 p-4 rounded-lg mb-6 border"><label className="block text-sm font-bold text-gray-700 mb-2">Expected rejoin date (Optional):</label><input name="rejoinDate" type="date" className="w-full border p-2 rounded" /></div>
+          <div className="flex justify-end space-x-3"><button type="button" onClick={() => setSignOffCrewData(null)} className="px-4 py-2 border rounded font-semibold">Cancel</button><button type="submit" className="px-4 py-2 bg-red-600 text-white rounded font-bold">Confirm</button></div>
         </form>
       </div>
     );
   };
 
-  // Shared Add/Edit Ship Modal
   const ShipFormModal = () => {
     if (!showShipModal && !editShipData) return null;
     const isEditing = !!editShipData;
-    
     const onSubmit = (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       const fd = new FormData(e.currentTarget);
-      const shipData: Partial<ShipData> = {
-        name: fd.get('name') as string, 
-        flag: fd.get('flag') as string, 
-        minSafeManning: parseInt(fd.get('minSafeManning') as string), 
-        cabinCapacity: parseInt(fd.get('cabinCapacity') as string), 
-        lsaCapacity: parseInt(fd.get('lsaCapacity') as string), 
-        color: editShipData ? editShipData.color : 'bg-blue-100'
-      };
-      
-      if (isEditing && editShipData) {
-        handleUpdateShipToDb(editShipData.id, shipData);
-        setEditShipData(null);
-      } else {
-        handleAddShipToDb(shipData);
-        setShowShipModal(false);
-      }
+      const shipData: Partial<ShipData> = { name: fd.get('name') as string, flag: fd.get('flag') as string, minSafeManning: parseInt(fd.get('minSafeManning') as string), cabinCapacity: parseInt(fd.get('cabinCapacity') as string), lsaCapacity: parseInt(fd.get('lsaCapacity') as string), color: editShipData ? editShipData.color : 'bg-blue-100' };
+      if (isEditing && editShipData) { handleUpdateShipToDb(editShipData.id, shipData); setEditShipData(null); } 
+      else { handleAddShipToDb(shipData); setShowShipModal(false); }
     };
-
     return (
       <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
         <form onSubmit={onSubmit} className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-          <h2 className="text-xl font-bold mb-4 flex items-center"><Ship className="mr-2" /> {isEditing ? 'Edit Vessel' : 'Add New Vessel'}</h2>
+          <h2 className="text-xl font-bold mb-4 flex items-center"><Ship className="mr-2" /> {isEditing ? 'Edit Vessel' : 'Add Vessel'}</h2>
           <div className="space-y-3">
             <div><label className="block text-sm font-bold text-gray-700">Vessel Name</label><input name="name" defaultValue={editShipData?.name} required className="w-full border p-2 rounded" /></div>
-            <div><label className="block text-sm font-bold text-gray-700">Flag (e.g., TR, PA)</label><input name="flag" defaultValue={editShipData?.flag} required className="w-full border p-2 rounded" /></div>
+            <div><label className="block text-sm font-bold text-gray-700">Flag</label><input name="flag" defaultValue={editShipData?.flag} required className="w-full border p-2 rounded" /></div>
             <div className="grid grid-cols-3 gap-2">
               <div><label className="block text-xs font-bold text-gray-700">Min. Safe</label><input name="minSafeManning" defaultValue={editShipData?.minSafeManning} type="number" required className="w-full border p-2 rounded" /></div>
               <div><label className="block text-xs font-bold text-gray-700">Cabin Cap.</label><input name="cabinCapacity" defaultValue={editShipData?.cabinCapacity} type="number" required className="w-full border p-2 rounded" /></div>
               <div><label className="block text-xs font-bold text-gray-700">LSA Cap.</label><input name="lsaCapacity" defaultValue={editShipData?.lsaCapacity} type="number" required className="w-full border p-2 rounded" /></div>
             </div>
           </div>
-          <div className="mt-6 flex justify-end space-x-3">
-            <button type="button" onClick={() => { setShowShipModal(false); setEditShipData(null); }} className="px-4 py-2 border rounded font-semibold">Cancel</button>
-            <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded font-bold">{isEditing ? 'Update Vessel' : 'Save Vessel'}</button>
-          </div>
+          <div className="mt-6 flex justify-end space-x-3"><button type="button" onClick={() => { setShowShipModal(false); setEditShipData(null); }} className="px-4 py-2 border rounded">Cancel</button><button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded font-bold">Save</button></div>
         </form>
       </div>
     );
   };
 
-  // Shared Add/Edit Crew Modal
   const CrewFormModal = () => {
     if (!showCrewModal && !editCrewData) return null;
     const isEditing = !!editCrewData;
     const [statusOption, setStatusOption] = useState(editCrewData ? editCrewData.status : 'onleave');
 
-    useEffect(() => {
-      if (editCrewData) setStatusOption(editCrewData.status);
-      else setStatusOption('onleave');
-    }, [editCrewData, showCrewModal]);
+    useEffect(() => { setStatusOption(editCrewData ? editCrewData.status : 'onleave'); }, [editCrewData, showCrewModal]);
 
     const onSubmit = (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
@@ -498,8 +445,8 @@ export default function App() {
         contractStart: statusOption === 'onboard' && fd.get('contractStart') ? new Date(fd.get('contractStart') as string).toISOString() : null,
         contractEnd: statusOption === 'onboard' && fd.get('contractEnd') ? new Date(fd.get('contractEnd') as string).toISOString() : null,
         readinessDate: statusOption === 'onleave' && fd.get('readinessDate') ? new Date(fd.get('readinessDate') as string).toISOString() : null,
+        isProbation: fd.get('isProbation') === 'on' 
       };
-
       attemptAssignment(crewData);
     };
 
@@ -508,15 +455,19 @@ export default function App() {
     return (
       <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
         <form onSubmit={onSubmit} className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
-          <h2 className="text-xl font-bold mb-4 flex items-center"><Users className="mr-2" /> {isEditing ? 'Edit Personnel' : 'Add New Personnel'}</h2>
+          <h2 className="text-xl font-bold mb-4 flex items-center"><Users className="mr-2" /> {isEditing ? 'Edit Personnel' : 'Add Personnel'}</h2>
           <div className="flex space-x-4 mb-4 border-b pb-4">
-            <label className="flex items-center cursor-pointer"><input type="radio" checked={statusOption === 'onleave'} onChange={() => setStatusOption('onleave')} className="mr-2" /> Crew Pool (On Leave)</label>
+            <label className="flex items-center cursor-pointer"><input type="radio" checked={statusOption === 'onleave'} onChange={() => setStatusOption('onleave')} className="mr-2" /> Crew Pool</label>
             <label className="flex items-center cursor-pointer"><input type="radio" checked={statusOption === 'onboard'} onChange={() => setStatusOption('onboard')} className="mr-2" /> Assign to Vessel</label>
           </div>
           <div className="space-y-3">
             <div><label className="block text-sm font-bold text-gray-700">Full Name</label><input name="name" defaultValue={editCrewData?.name} required className="w-full border p-2 rounded" /></div>
-            <div><label className="block text-sm font-bold text-gray-700">Competency (License)</label><select name="competency" defaultValue={editCrewData?.competency} required className="w-full border p-2 rounded">{COMPETENCIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-            {statusOption === 'onleave' && (<div><label className="block text-sm font-bold text-gray-700">Readiness / Rejoin Date</label><input name="readinessDate" defaultValue={formatDateForInput(editCrewData?.readinessDate)} type="date" className="w-full border p-2 rounded" /></div>)}
+            <div>
+              <label className="block text-sm font-bold text-gray-700">Competency</label>
+              <input name="competency" list="competency-options" defaultValue={editCrewData?.competency} required className="w-full border p-2 rounded" autoComplete="off" />
+              <datalist id="competency-options">{COMPETENCIES.map(c => <option key={c} value={c} />)}</datalist>
+            </div>
+            {statusOption === 'onleave' && (<div><label className="block text-sm font-bold text-gray-700">Readiness Date</label><input name="readinessDate" defaultValue={formatDateForInput(editCrewData?.readinessDate)} type="date" className="w-full border p-2 rounded" /></div>)}
             {statusOption === 'onboard' && (
               <>
                 <div className="grid grid-cols-2 gap-3">
@@ -527,10 +478,14 @@ export default function App() {
                   <div><label className="block text-sm font-bold text-gray-700">Contract Start</label><input name="contractStart" defaultValue={formatDateForInput(editCrewData?.contractStart)} type="date" required className="w-full border p-2 rounded" /></div>
                   <div><label className="block text-sm font-bold text-gray-700">Contract End</label><input name="contractEnd" defaultValue={formatDateForInput(editCrewData?.contractEnd)} type="date" required className="w-full border p-2 rounded" /></div>
                 </div>
+                <div className="flex items-center pt-2">
+                  <input type="checkbox" name="isProbation" id="isProbation" defaultChecked={editCrewData?.isProbation} className="mr-2 h-4 w-4 text-blue-600 rounded" />
+                  <label htmlFor="isProbation" className="text-sm font-bold text-gray-700">This is a Probation Period Contract</label>
+                </div>
               </>
             )}
           </div>
-          <div className="mt-6 flex justify-end space-x-3"><button type="button" onClick={() => { setShowCrewModal(false); setEditCrewData(null); }} className="px-4 py-2 border rounded font-semibold">Cancel</button><button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded font-bold">{isEditing ? 'Update Personnel' : 'Save Personnel'}</button></div>
+          <div className="mt-6 flex justify-end space-x-3"><button type="button" onClick={() => { setShowCrewModal(false); setEditCrewData(null); }} className="px-4 py-2 border rounded">Cancel</button><button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded font-bold">Save</button></div>
         </form>
       </div>
     );
@@ -548,70 +503,53 @@ export default function App() {
         rank: fd.get('rank') as string,
         contractStart: new Date(fd.get('contractStart') as string).toISOString(), 
         contractEnd: new Date(fd.get('contractEnd') as string).toISOString(), 
-        readinessDate: null
+        readinessDate: null,
+        isProbation: fd.get('isProbation') === 'on'
       });
     };
     return (
       <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
         <form onSubmit={onSubmit} className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
           <h2 className="text-xl font-bold mb-2 flex items-center text-blue-700"><UserPlus className="mr-2" /> Assign to Vessel</h2>
-          <p className="text-gray-600 mb-4 pb-4 border-b">Assigning <strong>{assignCrewData.name}</strong>. <br/><span className="text-sm">Competency: {assignCrewData.competency}</span></p>
+          <p className="text-gray-600 mb-4 pb-4 border-b">Assigning <strong>{assignCrewData.name}</strong>.</p>
           <div className="space-y-3">
             <div><label className="block text-sm font-bold text-gray-700">Target Vessel</label><select name="shipId" required className="w-full border p-2 rounded">{ships.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
             <div><label className="block text-sm font-bold text-gray-700">Assign Rank</label><select name="rank" required className="w-full border p-2 rounded">{RANKS.map(r => <option key={r} value={r}>{r}</option>)}</select></div>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-sm font-bold text-gray-700">Contract Start</label><input name="contractStart" type="date" required className="w-full border p-2 rounded" /></div>
-              <div><label className="block text-sm font-bold text-gray-700">Contract End</label><input name="contractEnd" type="date" required className="w-full border p-2 rounded" /></div>
+              <div><label className="block text-sm font-bold text-gray-700">Start Date</label><input name="contractStart" type="date" required className="w-full border p-2 rounded" /></div>
+              <div><label className="block text-sm font-bold text-gray-700">End Date</label><input name="contractEnd" type="date" required className="w-full border p-2 rounded" /></div>
+            </div>
+            <div className="flex items-center pt-2">
+              <input type="checkbox" name="isProbation" id="isProbationAssign" className="mr-2 h-4 w-4 text-blue-600 rounded" />
+              <label htmlFor="isProbationAssign" className="text-sm font-bold text-gray-700">Probation Period Contract</label>
             </div>
           </div>
-          <div className="mt-6 flex justify-end space-x-3"><button type="button" onClick={() => setAssignCrewData(null)} className="px-4 py-2 border rounded font-semibold">Cancel</button><button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded font-bold">Complete Assignment</button></div>
+          <div className="mt-6 flex justify-end space-x-3"><button type="button" onClick={() => setAssignCrewData(null)} className="px-4 py-2 border rounded">Cancel</button><button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded font-bold">Assign</button></div>
         </form>
       </div>
     );
   };
 
-  // Shared Add/Edit System User Modal
   const SystemUserFormModal = () => {
     if (!showUserModal && !editUserData) return null;
     const isEditing = !!editUserData;
-    
     const onSubmit = (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       const fd = new FormData(e.currentTarget);
-      const userData: Partial<AppUserData> = { 
-        username: fd.get('username') as string, 
-        password: fd.get('password') as string, 
-        role: fd.get('role') as string 
-      };
-      
-      if (isEditing && editUserData) {
-        handleUpdateUserToDb(editUserData.id, userData);
-        setEditUserData(null);
-      } else {
-        handleAddUserToDb(userData);
-        setShowUserModal(false);
-      }
+      const userData: Partial<AppUserData> = { username: fd.get('username') as string, password: fd.get('password') as string, role: fd.get('role') as string };
+      if (isEditing && editUserData) { handleUpdateUserToDb(editUserData.id, userData); setEditUserData(null); } 
+      else { handleAddUserToDb(userData); setShowUserModal(false); }
     };
-
     return (
       <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
         <form onSubmit={onSubmit} className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
-          <h2 className="text-xl font-bold mb-4 flex items-center text-indigo-700"><UserCog className="mr-2" /> {isEditing ? 'Edit System User' : 'Add System User'}</h2>
+          <h2 className="text-xl font-bold mb-4 flex items-center text-indigo-700"><UserCog className="mr-2" /> {isEditing ? 'Edit User' : 'Add User'}</h2>
           <div className="space-y-3">
-            <div><label className="block text-sm font-bold text-gray-700">Username</label><input name="username" defaultValue={editUserData?.username} required className="w-full border p-2 rounded" placeholder="e.g. john.doe" disabled={isEditing && editUserData?.username === 'admin'} /></div>
-            <div><label className="block text-sm font-bold text-gray-700">Password</label><input name="password" defaultValue={editUserData?.password} required type="text" className="w-full border p-2 rounded" placeholder="Strong password" /></div>
-            <div>
-              <label className="block text-sm font-bold text-gray-700">Role</label>
-              <select name="role" defaultValue={editUserData?.role || 'user'} className="w-full border p-2 rounded" disabled={isEditing && editUserData?.username === 'admin'}>
-                <option value="user">User (Standard Access)</option>
-                <option value="admin">Admin (Full Access)</option>
-              </select>
-            </div>
+            <div><label className="block text-sm font-bold text-gray-700">Username</label><input name="username" defaultValue={editUserData?.username} required className="w-full border p-2 rounded" disabled={isEditing && editUserData?.username === 'admin'} /></div>
+            <div><label className="block text-sm font-bold text-gray-700">Password</label><input name="password" defaultValue={editUserData?.password} required type="text" className="w-full border p-2 rounded" /></div>
+            <div><label className="block text-sm font-bold text-gray-700">Role</label><select name="role" defaultValue={editUserData?.role || 'user'} className="w-full border p-2 rounded" disabled={isEditing && editUserData?.username === 'admin'}><option value="user">User</option><option value="admin">Admin</option></select></div>
           </div>
-          <div className="mt-6 flex justify-end space-x-3">
-            <button type="button" onClick={() => { setShowUserModal(false); setEditUserData(null); }} className="px-4 py-2 border rounded font-semibold">Cancel</button>
-            <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded font-bold">{isEditing ? 'Update User' : 'Save User'}</button>
-          </div>
+          <div className="mt-6 flex justify-end space-x-3"><button type="button" onClick={() => { setShowUserModal(false); setEditUserData(null); }} className="px-4 py-2 border rounded">Cancel</button><button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded font-bold">Save</button></div>
         </form>
       </div>
     );
@@ -636,56 +574,20 @@ export default function App() {
       <div className="flex flex-col h-full bg-gray-100 p-4 overflow-y-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-lg shadow-sm border p-4">
-            <div className="flex items-center justify-between mb-3 border-b pb-2">
-              <div className="flex items-center text-gray-800 font-bold"><FileWarning size={18} className="mr-2 text-orange-500"/> Contract Expiries</div>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${systemAlerts.expiredContracts.length > 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{systemAlerts.expiredContracts.length}</span>
-            </div>
-            {systemAlerts.expiredContracts.length > 0 ? (
-              <ul className="text-sm space-y-1 max-h-24 overflow-y-auto pr-1">
-                {systemAlerts.expiredContracts.map((alert, idx) => (
-                  <li key={idx} className="flex justify-between items-center text-red-600"><span className="truncate w-3/5" title={alert.crewName}>{alert.crewName}</span><span className="text-xs font-semibold bg-red-50 px-1 rounded">{alert.shipName}</span></li>
-                ))}
-              </ul>
-            ) : (<div className="text-green-600 text-sm flex items-center"><CheckCircle size={14} className="mr-1"/> All contracts valid</div>)}
+            <div className="flex items-center justify-between mb-3 border-b pb-2"><div className="flex items-center text-gray-800 font-bold"><FileWarning size={18} className="mr-2 text-orange-500"/> Contract Expiries</div><span className={`px-2 py-0.5 rounded-full text-xs font-bold ${systemAlerts.expiredContracts.length > 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{systemAlerts.expiredContracts.length}</span></div>
+            {systemAlerts.expiredContracts.length > 0 ? (<ul className="text-sm space-y-1 max-h-24 overflow-y-auto pr-1">{systemAlerts.expiredContracts.map((alert, idx) => (<li key={idx} className="flex justify-between items-center text-red-600"><span className="truncate w-3/5" title={alert.crewName}>{alert.crewName}</span><span className="text-xs font-semibold bg-red-50 px-1 rounded">{alert.shipName}</span></li>))}</ul>) : (<div className="text-green-600 text-sm flex items-center"><CheckCircle size={14} className="mr-1"/> All valid</div>)}
           </div>
           <div className="bg-white rounded-lg shadow-sm border p-4">
-            <div className="flex items-center justify-between mb-3 border-b pb-2">
-              <div className="flex items-center text-gray-800 font-bold"><ShieldAlert size={18} className="mr-2 text-red-500"/> Safe Manning Alerts</div>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${systemAlerts.manning.length > 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{systemAlerts.manning.length}</span>
-            </div>
-            {systemAlerts.manning.length > 0 ? (
-              <ul className="text-sm space-y-1 max-h-24 overflow-y-auto pr-1">
-                {systemAlerts.manning.map((alert, idx) => (
-                  <li key={idx} className="flex justify-between items-center text-red-600"><span className="font-semibold">{alert.shipName}</span><span className="text-xs">POB: {alert.current}/{alert.min}</span></li>
-                ))}
-              </ul>
-            ) : (<div className="text-green-600 text-sm flex items-center"><CheckCircle size={14} className="mr-1"/> Safe Mannings OK</div>)}
+            <div className="flex items-center justify-between mb-3 border-b pb-2"><div className="flex items-center text-gray-800 font-bold"><ShieldAlert size={18} className="mr-2 text-red-500"/> Safe Manning</div><span className={`px-2 py-0.5 rounded-full text-xs font-bold ${systemAlerts.manning.length > 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{systemAlerts.manning.length}</span></div>
+            {systemAlerts.manning.length > 0 ? (<ul className="text-sm space-y-1 max-h-24 overflow-y-auto pr-1">{systemAlerts.manning.map((alert, idx) => (<li key={idx} className="flex justify-between items-center text-red-600"><span className="font-semibold">{alert.shipName}</span><span className="text-xs">POB: {alert.current}/{alert.min}</span></li>))}</ul>) : (<div className="text-green-600 text-sm flex items-center"><CheckCircle size={14} className="mr-1"/> All OK</div>)}
           </div>
           <div className="bg-white rounded-lg shadow-sm border p-4">
-            <div className="flex items-center justify-between mb-3 border-b pb-2">
-              <div className="flex items-center text-gray-800 font-bold"><Ship size={18} className="mr-2 text-blue-500"/> Cabin Cap. Exceeded</div>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${systemAlerts.cabin.length > 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{systemAlerts.cabin.length}</span>
-            </div>
-            {systemAlerts.cabin.length > 0 ? (
-              <ul className="text-sm space-y-1 max-h-24 overflow-y-auto pr-1">
-                {systemAlerts.cabin.map((alert, idx) => (
-                  <li key={idx} className="flex justify-between items-center text-red-600"><span className="font-semibold">{alert.shipName}</span><span className="text-xs">POB: {alert.current} (Max: {alert.max})</span></li>
-                ))}
-              </ul>
-            ) : (<div className="text-green-600 text-sm flex items-center"><CheckCircle size={14} className="mr-1"/> Capacities compliant</div>)}
+            <div className="flex items-center justify-between mb-3 border-b pb-2"><div className="flex items-center text-gray-800 font-bold"><Ship size={18} className="mr-2 text-blue-500"/> Cabin Capacity</div><span className={`px-2 py-0.5 rounded-full text-xs font-bold ${systemAlerts.cabin.length > 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{systemAlerts.cabin.length}</span></div>
+            {systemAlerts.cabin.length > 0 ? (<ul className="text-sm space-y-1 max-h-24 overflow-y-auto pr-1">{systemAlerts.cabin.map((alert, idx) => (<li key={idx} className="flex justify-between items-center text-red-600"><span className="font-semibold">{alert.shipName}</span><span className="text-xs">POB: {alert.current} (Max: {alert.max})</span></li>))}</ul>) : (<div className="text-green-600 text-sm flex items-center"><CheckCircle size={14} className="mr-1"/> Capacities compliant</div>)}
           </div>
           <div className="bg-white rounded-lg shadow-sm border p-4">
-            <div className="flex items-center justify-between mb-3 border-b pb-2">
-              <div className="flex items-center text-gray-800 font-bold"><LifeBuoy size={18} className="mr-2 text-indigo-500"/> LSA Cap. Exceeded</div>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${systemAlerts.lsa.length > 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{systemAlerts.lsa.length}</span>
-            </div>
-            {systemAlerts.lsa.length > 0 ? (
-              <ul className="text-sm space-y-1 max-h-24 overflow-y-auto pr-1">
-                {systemAlerts.lsa.map((alert, idx) => (
-                  <li key={idx} className="flex justify-between items-center text-red-600"><span className="font-semibold">{alert.shipName}</span><span className="text-xs">POB: {alert.current} (Max: {alert.max})</span></li>
-                ))}
-              </ul>
-            ) : (<div className="text-green-600 text-sm flex items-center"><CheckCircle size={14} className="mr-1"/> LSA Capacities OK</div>)}
+            <div className="flex items-center justify-between mb-3 border-b pb-2"><div className="flex items-center text-gray-800 font-bold"><LifeBuoy size={18} className="mr-2 text-indigo-500"/> LSA Capacity</div><span className={`px-2 py-0.5 rounded-full text-xs font-bold ${systemAlerts.lsa.length > 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{systemAlerts.lsa.length}</span></div>
+            {systemAlerts.lsa.length > 0 ? (<ul className="text-sm space-y-1 max-h-24 overflow-y-auto pr-1">{systemAlerts.lsa.map((alert, idx) => (<li key={idx} className="flex justify-between items-center text-red-600"><span className="font-semibold">{alert.shipName}</span><span className="text-xs">POB: {alert.current} (Max: {alert.max})</span></li>))}</ul>) : (<div className="text-green-600 text-sm flex items-center"><CheckCircle size={14} className="mr-1"/> Compliant</div>)}
           </div>
         </div>
 
@@ -704,7 +606,7 @@ export default function App() {
                   <div className="space-y-2 text-sm text-gray-700 mb-4 min-h-[60px]">
                     {isSafeManningLow && <p className="text-red-600 font-semibold flex items-center"><ShieldAlert size={14} className="mr-1"/> Safe Manning not met!</p>}
                     {isCabinExceeded && <p className="text-red-600 font-semibold flex items-center"><AlertTriangle size={14} className="mr-1"/> Cabin capacity exceeded!</p>}
-                    {expiredCount > 0 && <p className="font-medium text-red-600">{expiredCount} crew contract(s) expired</p>}
+                    {expiredCount > 0 && <p className="font-medium text-red-600">{expiredCount} contract(s) expired</p>}
                     {expiringSoonCount > 0 && <p className="font-medium text-orange-600">{expiringSoonCount} contract(s) expiring soon</p>}
                     {!isSafeManningLow && !isCabinExceeded && expiredCount === 0 && expiringSoonCount === 0 && <p className="text-green-700">Status normal.</p>}
                   </div>
@@ -728,10 +630,7 @@ export default function App() {
               {waitingList.map((crew) => (
                 <div key={crew.id} className="border-l-4 border-blue-500 bg-gray-50 p-3 rounded shadow-sm">
                   <div className="flex justify-between items-start">
-                    <div className="max-w-[70%]">
-                      <span className="font-bold text-gray-800 block truncate" title={crew.name}>{crew.name}</span>
-                      <span className="text-xs text-gray-500 block truncate">{crew.competency}</span>
-                    </div>
+                    <div className="max-w-[70%]"><span className="font-bold text-gray-800 block truncate" title={crew.name}>{crew.name}</span><span className="text-xs text-gray-500 block truncate">{crew.competency}</span></div>
                     <button onClick={() => setAssignCrewData(crew)} className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold hover:bg-blue-600 hover:text-white transition flex items-center"><UserPlus size={12} className="mr-1"/> Assign</button>
                   </div>
                   <div className="mt-2 text-xs text-gray-600"><span className="text-gray-400">Readiness: </span>{crew.readinessDate ? new Date(crew.readinessDate).toLocaleDateString('en-GB') : 'TBA'}</div>
@@ -749,7 +648,12 @@ export default function App() {
     if (!selectedShipId) return null;
     const ship = ships.find(s => s.id === selectedShipId);
     if (!ship) return null;
-    const onboard = crews.filter(c => c.shipId === selectedShipId && c.status === 'onboard');
+    
+    const onboard = crews
+      .filter(c => c.shipId === selectedShipId && c.status === 'onboard')
+      .sort((a, b) => RANKS.indexOf(a.rank || '') - RANKS.indexOf(b.rank || ''));
+
+    const timelineSpan = 120; // 4 Aylık görünüm
     const months = Array.from({length: 4}).map((_,i) => {
       const d = new Date(); d.setMonth(d.getMonth() + i); return d.toLocaleString('en-GB', { month: 'short', year: 'numeric' });
     });
@@ -759,7 +663,7 @@ export default function App() {
         <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
           <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
             <div>
-              <h2 className="text-2xl font-bold text-gray-800">{ship.name} - Crew Lineup</h2>
+              <h2 className="text-2xl font-bold text-gray-800">{ship.name} - Crew Lineup & Planning</h2>
               <div className="text-sm text-gray-500 mt-1 flex gap-4">
                 <span>Safe Manning: <strong className={onboard.length < ship.minSafeManning ? 'text-red-500' : ''}>{onboard.length}/{ship.minSafeManning}</strong></span>
                 <span>Cabin Cap: <strong className={onboard.length > ship.cabinCapacity ? 'text-red-500' : ''}>{onboard.length}/{ship.cabinCapacity}</strong></span>
@@ -767,36 +671,87 @@ export default function App() {
             </div>
             <button onClick={() => setSelectedShipId(null)} className="p-2 hover:bg-gray-200 rounded-full"><X size={24} /></button>
           </div>
+          
           <div className="p-4 flex-1 overflow-auto">
-            <div className="flex border-b pb-2 mb-4 sticky top-0 bg-white z-10 text-sm font-bold text-gray-600">
+            <div className="flex border-b pb-2 mb-4 sticky top-0 bg-white z-20 text-sm font-bold text-gray-600">
               <div className="w-1/4">Personnel Info</div>
-              <div className="w-3/4 flex">
+              <div className="w-3/4 flex pr-6">
                 <div className="w-1/4 border-l pl-2 text-center text-blue-600">{months[0]}</div>
                 <div className="w-1/4 border-l pl-2 text-center">{months[1]}</div>
                 <div className="w-1/4 border-l pl-2 text-center">{months[2]}</div>
                 <div className="w-1/4 border-l pl-2 text-center">{months[3]}</div>
               </div>
             </div>
+            
             <div className="space-y-4">
               {onboard.map(crew => {
-                const daysRemaining = calculateDaysRemaining(crew.contractEnd);
-                const colorClass = getContractColor(daysRemaining);
-                let barWidth = daysRemaining < 0 ? 0 : Math.min((daysRemaining / 120) * 100, 100);
+                const startOffset = calculateDaysRemaining(crew.contractStart);
+                const endOffset = calculateDaysRemaining(crew.contractEnd);
+                
+                const isPlanned = startOffset > 0;
+                const isExpired = endOffset < 0;
+                
+                const colors = getContractColor(endOffset);
+                
+                let leftPercent = 0;
+                let widthPercent = 0;
+
+                if (!isExpired) {
+                  const barStart = Math.max(0, startOffset);
+                  const barEnd = Math.min(timelineSpan, endOffset);
+                  if (barStart < timelineSpan) {
+                    leftPercent = (barStart / timelineSpan) * 100;
+                    widthPercent = ((barEnd - barStart) / timelineSpan) * 100;
+                  }
+                }
+
+                const stripeStyle = crew.isProbation ? {
+                  backgroundImage: isPlanned 
+                    ? 'repeating-linear-gradient(45deg, rgba(0,0,0,0.05), rgba(0,0,0,0.05) 8px, transparent 8px, transparent 16px)'
+                    : 'repeating-linear-gradient(45deg, rgba(255,255,255,0.25), rgba(255,255,255,0.25) 8px, transparent 8px, transparent 16px)'
+                } : {};
 
                 return (
-                  <div key={crew.id} className="flex items-center text-sm border-b border-gray-100 pb-3 hover:bg-gray-50 p-2 rounded group relative">
+                  <div key={crew.id} className="flex items-center text-sm border-b border-gray-100 pb-3 hover:bg-gray-50 p-2 rounded group">
                     <div className="w-1/4 flex justify-between items-center pr-2">
-                      <div><div className="font-bold text-gray-800 truncate" title={crew.name}>{crew.name}</div><div className="text-gray-500 text-xs flex gap-1"><span className="font-semibold text-gray-800">{crew.rank}</span> <span className="truncate" title={crew.competency}>({crew.competency})</span></div></div>
+                      <div>
+                        <div className="font-bold text-gray-800 truncate" title={crew.name}>{crew.name}</div>
+                        <div className="text-gray-500 text-xs flex gap-1">
+                          <span className={`font-bold ${isPlanned ? 'text-blue-500' : 'text-gray-800'}`}>{crew.rank}</span> 
+                          <span className="truncate" title={crew.competency}>({crew.competency})</span>
+                        </div>
+                      </div>
                       <button onClick={() => setSignOffCrewData(crew)} className="opacity-0 group-hover:opacity-100 text-red-500 hover:bg-red-100 p-1.5 rounded transition-all" title="Sign-off from vessel"><LogOut size={16} /></button>
                     </div>
-                    <div className="w-3/4 flex flex-col relative h-8 justify-center bg-gray-100 rounded">
-                      <div className="absolute left-0 top-0 h-full border-r border-dashed border-gray-300 w-1/4"></div><div className="absolute left-1/4 top-0 h-full border-r border-dashed border-gray-300 w-1/4"></div><div className="absolute left-2/4 top-0 h-full border-r border-dashed border-gray-300 w-1/4"></div>
-                      {daysRemaining < 0 ? (
-                        <div className="relative z-10 pl-2 text-red-600 font-bold flex items-center"><AlertTriangle size={14} className="mr-1"/> Expired ({Math.abs(daysRemaining)} days)</div>
+
+                    <div className="w-3/4 flex relative h-10 items-center bg-gray-100 rounded pr-6">
+                      <div className="absolute left-1/4 top-0 h-full border-l border-dashed border-gray-300 w-1/4 z-0"></div>
+                      <div className="absolute left-2/4 top-0 h-full border-l border-dashed border-gray-300 w-1/4 z-0"></div>
+                      <div className="absolute left-3/4 top-0 h-full border-l border-dashed border-gray-300 w-1/4 z-0"></div>
+                      
+                      {isExpired ? (
+                        <div className="relative z-10 pl-2 text-red-600 font-bold flex items-center">
+                          <AlertTriangle size={14} className="mr-1"/> Expired ({Math.abs(endOffset)} days)
+                        </div>
                       ) : (
-                        <div className="relative z-10 w-full px-1">
-                          <div className={`h-4 rounded-full ${colorClass} transition-all`} style={{ width: `${barWidth}%` }}></div>
-                          <div className="text-[10px] mt-1 font-semibold text-gray-600 text-right pr-2" style={{ width: `${barWidth}%` }}>{getStatusText(daysRemaining)}</div>
+                        <div className="absolute h-6 flex items-center z-10" style={{ left: `${leftPercent}%`, width: `${widthPercent}%`, minWidth: '40px' }}>
+                          <div 
+                            className={`h-full w-full rounded-md shadow-sm flex items-center justify-center text-[10px] font-bold overflow-hidden transition-all duration-300
+                              ${isPlanned ? `border-2 border-dashed ${colors.border} ${colors.light} ${colors.text}` : `${colors.bg} text-white`}`
+                            }
+                            style={stripeStyle}
+                            title={crew.isProbation ? 'Probation Period' : (isPlanned ? `Planned to join in ${startOffset} days` : `Ends in ${endOffset} days`)}
+                          >
+                            {isPlanned ? 'PLANNED' : ''}
+                          </div>
+
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setEditCrewData(crew); setShowCrewModal(true); }}
+                            className={`absolute -right-6 p-0.5 rounded-full hover:bg-gray-200 transition-transform hover:scale-110 ${colors.text}`}
+                            title="Extension / Edit Contract"
+                          >
+                            <ChevronRight size={18} strokeWidth={3} />
+                          </button>
                         </div>
                       )}
                     </div>
@@ -899,6 +854,101 @@ export default function App() {
     );
   }
 
+  const ComplianceMatrixPanel = () => {
+    const [newRankName, setNewRankName] = useState('');
+    const [addingCompToRank, setAddingCompToRank] = useState<string | null>(null);
+
+    const handleAddRank = (e: FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      if (!newRankName.trim()) return;
+      const updatedMatrix = { ...rankMatrix, [newRankName.trim()]: [] };
+      handleUpdateMatrixToDb(updatedMatrix);
+      setNewRankName('');
+    };
+
+    const handleDeleteRank = (rankToDelete: string) => {
+      if (window.confirm(`Are you sure you want to delete the rank '${rankToDelete}'?\nNote: Existing personnel with this rank will not be deleted but may be flagged for compliance.`)) {
+        const updatedMatrix = { ...rankMatrix };
+        delete updatedMatrix[rankToDelete];
+        handleUpdateMatrixToDb(updatedMatrix);
+      }
+    };
+
+    const handleAddCompetency = (rank: string, compToAdd: string) => {
+      if (!compToAdd.trim()) return;
+      const currentList = rankMatrix[rank] || [];
+      if (currentList.includes(compToAdd.trim())) return;
+
+      const updatedMatrix = { ...rankMatrix, [rank]: [...currentList, compToAdd.trim()] };
+      handleUpdateMatrixToDb(updatedMatrix);
+      setAddingCompToRank(null);
+    };
+
+    const handleDeleteCompetency = (rank: string, compToDelete: string) => {
+      if (window.confirm(`Remove '${compToDelete}' competency from rank '${rank}'?`)) {
+        const updatedMatrix = { ...rankMatrix, [rank]: (rankMatrix[rank] || []).filter(c => c !== compToDelete) };
+        handleUpdateMatrixToDb(updatedMatrix);
+      }
+    };
+
+    const InlineAddCompForm = ({ rank }: { rank: string }) => {
+      const [val, setVal] = useState('');
+      return (
+        <form className="flex items-center gap-2 mt-2 bg-gray-50 p-2 rounded border border-blue-200 shadow-sm" onSubmit={(e) => { e.preventDefault(); handleAddCompetency(rank, val); }}>
+          <input type="text" list="matrix-comp-list" autoFocus className="border p-1.5 rounded text-sm w-48 outline-none focus:ring-1 focus:ring-blue-500" placeholder="Type or select competency..." value={val} onChange={(e) => setVal(e.target.value)} />
+          <button type="submit" className="bg-blue-600 text-white p-1.5 rounded hover:bg-blue-700 transition" title="Save"><Check size={16} /></button>
+          <button type="button" onClick={() => setAddingCompToRank(null)} className="bg-gray-200 text-gray-600 p-1.5 rounded hover:bg-gray-300 transition" title="Cancel"><X size={16} /></button>
+        </form>
+      );
+    };
+
+    return (
+      <div className="p-6 h-full overflow-y-auto bg-gray-50">
+        <h2 className="text-2xl font-bold mb-2 text-gray-800 flex items-center"><TableProperties className="mr-3" /> Rank - Competency Compliance Matrix</h2>
+        <p className="text-gray-600 mb-6 border-b pb-4">Define acceptable competencies (licenses/certificates) for each rank here. The values added here will automatically populate the dropdown menus throughout the system.</p>
+
+        <datalist id="matrix-comp-list">{COMPETENCIES.map(c => <option key={c} value={c} />)}</datalist>
+
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-100 text-slate-700 border-b border-gray-200">
+                <th className="p-4 font-bold w-1/4">Rank (Position)</th>
+                <th className="p-4 font-bold w-16 text-center">Action</th>
+                <th className="p-4 font-bold w-full">Accepted Competencies</th>
+              </tr>
+            </thead>
+            <tbody>
+              {RANKS.map(rank => (
+                <tr key={rank} className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
+                  <td className="p-4 font-bold text-gray-800 align-top">{rank}</td>
+                  <td className="p-4 align-top text-center"><button onClick={() => handleDeleteRank(rank)} className="text-red-400 hover:text-red-600 p-2 rounded bg-white shadow-sm border" title="Delete Rank"><Trash2 size={16} /></button></td>
+                  <td className="p-4 align-top">
+                    <div className="flex flex-wrap gap-2 items-center">
+                      {(rankMatrix[rank] || []).map(comp => (
+                        <div key={comp} className="flex items-center bg-blue-50 border border-blue-200 text-blue-800 px-3 py-1.5 rounded-full text-sm font-medium shadow-sm">
+                          {comp}<button onClick={() => handleDeleteCompetency(rank, comp)} className="ml-2 text-blue-400 hover:text-red-500 transition-colors"><X size={14} /></button>
+                        </div>
+                      ))}
+                      {addingCompToRank === rank ? <InlineAddCompForm rank={rank} /> : <button onClick={() => setAddingCompToRank(rank)} className="flex items-center text-sm font-bold text-blue-600 hover:bg-blue-50 border border-dashed border-blue-300 px-3 py-1.5 rounded-full transition-colors"><Plus size={16} className="mr-1" /> Add</button>}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {RANKS.length === 0 && (<tr><td colSpan={3} className="p-8 text-center text-gray-500">No ranks defined in the matrix yet.</td></tr>)}
+            </tbody>
+          </table>
+          <div className="p-4 bg-gray-50 border-t border-gray-200">
+            <form onSubmit={handleAddRank} className="flex items-center gap-3">
+              <input type="text" placeholder="Enter new Rank name..." className="border p-2 rounded w-64 focus:ring-2 focus:ring-blue-500 outline-none" value={newRankName} onChange={(e) => setNewRankName(e.target.value)} />
+              <button type="submit" className="bg-slate-800 text-white px-4 py-2 rounded font-bold hover:bg-slate-700 transition flex items-center"><Plus size={18} className="mr-2" /> Add Rank</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="h-screen w-full flex flex-col font-sans bg-gray-200 text-gray-900 overflow-hidden">
       <header className="bg-slate-900 text-white p-4 shadow-md z-10 flex justify-between items-center">
@@ -906,6 +956,9 @@ export default function App() {
         <div className="flex items-center space-x-4">
           <nav className="flex space-x-2">
             <button onClick={() => setActiveTab('dashboard')} className={`flex items-center px-4 py-2 rounded transition-colors ${activeTab === 'dashboard' ? 'bg-slate-700 font-bold' : 'hover:bg-slate-800'}`}><LayoutDashboard size={18} className="mr-2" /> Dashboard</button>
+            {appUser?.role === 'admin' && (
+              <button onClick={() => setActiveTab('matrix')} className={`flex items-center px-4 py-2 rounded transition-colors ${activeTab === 'matrix' ? 'bg-slate-700 font-bold' : 'hover:bg-slate-800'}`}><TableProperties size={18} className="mr-2" /> Compliance Matrix</button>
+            )}
             <button onClick={() => setActiveTab('admin')} className={`flex items-center px-4 py-2 rounded transition-colors ${activeTab === 'admin' ? 'bg-slate-700 font-bold' : 'hover:bg-slate-800'}`}><Settings size={18} className="mr-2" /> Settings</button>
           </nav>
           <div className="h-6 w-px bg-slate-600 mx-2"></div>
@@ -916,7 +969,10 @@ export default function App() {
         </div>
       </header>
       <main className="flex-1 overflow-hidden relative">
-        {activeTab === 'dashboard' ? <Dashboard /> : <AdminPanel />}
+        {activeTab === 'dashboard' && <Dashboard />}
+        {activeTab === 'matrix' && <ComplianceMatrixPanel />}
+        {activeTab === 'admin' && <AdminPanel />}
+        
         <ShipDetailsModal />
         <ShipFormModal />
         <CrewFormModal />
