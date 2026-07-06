@@ -939,15 +939,17 @@ export default function App() {
                     <div className="bg-white p-1 px-2 border rounded text-center shadow-sm"><span className="text-gray-500 text-xs block">Cabin</span><strong className="text-base">{ship.cabinCapacity}</strong></div>
                     <div className="bg-white p-1 px-2 border rounded text-center shadow-sm"><span className="text-gray-500 text-xs block">LSA Cap.</span><strong className="text-base">{ship.lsaCapacity}</strong></div>
                   </div>
-                  {appUser?.role === 'admin' && (
+                  {(appUser?.role === 'admin' || appUser?.role === 'user') && (
                     <div className="flex gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => setEditShipData(ship)} className="text-blue-500 hover:text-blue-700 p-2 bg-blue-100 rounded" title="Edit Vessel"><Edit size={16} /></button>
-                      <button onClick={() => handleDeleteShipDb(ship.id, ship.name)} className="text-red-400 hover:text-red-600 p-2 bg-red-100 rounded" title="Delete Vessel"><Trash2 size={16} /></button>
+                      {appUser?.role === 'admin' && (
+                        <button onClick={() => handleDeleteShipDb(ship.id, ship.name)} className="text-red-400 hover:text-red-600 p-2 bg-red-100 rounded" title="Delete Vessel"><Trash2 size={16} /></button>
+                      )}
                     </div>
                   )}
                 </div>
               ))}
-              {appUser?.role === 'admin' && (
+              {(appUser?.role === 'admin' || appUser?.role === 'user') && (
                 <button onClick={() => setShowShipModal(true)} className="w-full py-3 border-2 border-dashed border-gray-300 text-gray-500 font-bold rounded flex items-center justify-center hover:border-blue-500 hover:text-blue-600 transition"><Plus size={20} className="mr-2" /> Add New Vessel</button>
               )}
             </div>
@@ -966,16 +968,18 @@ export default function App() {
                     <div className="font-bold text-sm text-gray-800 truncate" title={crew.name}>{crew.name}</div>
                     <div className="text-xs text-gray-500 truncate" title={crew.competency}>{crew.competency} • {crew.status === 'onboard' ? `Onboard (${ships.find(s=>s.id===crew.shipId)?.name || 'Unknown'} - ${crew.rank})` : 'On Leave (Pool)'}</div>
                   </div>
-                  {appUser?.role === 'admin' && (
+                  {(appUser?.role === 'admin' || appUser?.role === 'user') && (
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => setEditCrewData(crew)} className="text-blue-500 hover:text-blue-700 p-2 bg-blue-50 rounded shadow-sm" title="Edit Personnel"><Edit size={16} /></button>
-                      <button onClick={() => handleDeleteCrewDb(crew.id, crew.name)} className="text-red-400 hover:text-red-600 p-2 bg-red-50 rounded shadow-sm" title="Delete Personnel"><Trash2 size={16} /></button>
+                      {appUser?.role === 'admin' && (
+                        <button onClick={() => handleDeleteCrewDb(crew.id, crew.name)} className="text-red-400 hover:text-red-600 p-2 bg-red-50 rounded shadow-sm" title="Delete Personnel"><Trash2 size={16} /></button>
+                      )}
                     </div>
                   )}
                 </div>
               ))}
             </div>
-            {appUser?.role === 'admin' && (
+            {(appUser?.role === 'admin' || appUser?.role === 'user') && (
               <button onClick={() => setShowCrewModal(true)} className="w-full py-3 border-2 border-dashed border-gray-300 text-gray-500 font-bold rounded flex items-center justify-center hover:border-blue-500 hover:text-blue-600 transition"><Plus size={20} className="mr-2" /> Add New Personnel</button>
             )}
           </div>
