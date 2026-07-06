@@ -21,6 +21,9 @@ const firebaseConfig = {
   appId: "1:224379023927:web:4e6b7cd7dc87519b0685b2"
 };
 
+
+
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -214,12 +217,6 @@ export default function App() {
     if (daysRemaining < 15) return { bg: 'bg-orange-500', border: 'border-orange-500', text: 'text-orange-700', light: 'bg-orange-50' };
     if (daysRemaining < 45) return { bg: 'bg-yellow-400', border: 'border-yellow-400', text: 'text-yellow-700', light: 'bg-yellow-50' };
     return { bg: 'bg-green-500', border: 'border-green-500', text: 'text-green-700', light: 'bg-green-50' };
-  };
-
-  const getStatusText = (daysRemaining: number) => {
-    if (daysRemaining < 0) return `Expired ${Math.abs(daysRemaining)} d`;
-    if (daysRemaining === 0) return `Expires today`;
-    return `${daysRemaining} days left`;
   };
 
   const systemAlerts = useMemo(() => {
