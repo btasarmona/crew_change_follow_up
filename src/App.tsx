@@ -2,12 +2,19 @@ import { useState, useEffect, useMemo, type FormEvent } from 'react';
 import { 
   AlertTriangle, CheckCircle, Users, Ship, ShieldAlert, 
   Settings, LayoutDashboard, Filter, ChevronRight, Anchor, Plus, X, UserPlus, LogOut, Search, Trash2,
-  FileWarning, LifeBuoy, Lock, UserCog, LogIn, Edit, TableProperties, Check
+  FileWarning, LifeBuoy, Lock, UserCog, LogIn, Edit, TableProperties, Check,
+  ArrowUp, ArrowDown, MessageSquareText, MessageCircle
 } from 'lucide-react';
 
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+
+declare global {
+  var __firebase_config: string | undefined;
+  var __initial_auth_token: string | undefined;
+  var __app_id: string | undefined;
+}
 
 
 
@@ -22,32 +29,32 @@ const firebaseConfig = {
 };
 
 
-
-
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-
-// @ts-ignore
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
 // --- DİNAMİK VERİTABANI YOLLARI ---
-// (Canvas ortamıyla yerel ortamı uyumlu hale getiren yardımcı fonksiyonlar)
 const getCollectionRef = (colName: string) => {
-  // @ts-ignore
   return typeof __app_id !== 'undefined' 
     ? collection(db, 'artifacts', appId, 'public', 'data', colName)
     : collection(db, colName);
 };
 
 const getDocRef = (colName: string, docId: string) => {
-  // @ts-ignore
   return typeof __app_id !== 'undefined'
     ? doc(db, 'artifacts', appId, 'public', 'data', colName, docId)
     : doc(db, colName, docId);
 };
 
 // --- TYPESCRIPT INTERFACES ---
+export interface Note {
+  id: string;
+  text: string;
+  author: string;
+  date: string;
+}
+
 export interface ShipData {
   id: string;
   name: string;
@@ -56,6 +63,7 @@ export interface ShipData {
   cabinCapacity: number;
   lsaCapacity: number;
   color: string;
+  notes?: Note[];
 }
 
 export interface CrewData {
@@ -69,34 +77,41 @@ export interface CrewData {
   contractEnd: string | null;
   readinessDate: string | null;
   isProbation?: boolean;
+  notes?: Note[];
 }
 
 export interface AppUserData {
   id: string;
   username: string;
   password?: string;
-  role: string;
+  role: string; // 'admin', 'user', 'viewer'
+}
+
+export interface RankDef {
+  competencies: string[];
+  checkOverlap: boolean;
+  order: number;
 }
 
 // --- DEFAULT MATRIX (Seeding for Database) ---
-const DEFAULT_RANK_COMPETENCY_MATRIX: Record<string, string[]> = {
-  'Master': ['Master Mariner'],
-  'C/O': ['Master Mariner', 'Chief Mate'],
-  '2/O': ['Master Mariner', 'Chief Mate', 'OOW (Deck)'],
-  '3/O': ['Master Mariner', 'Chief Mate', 'OOW (Deck)'],
-  'C/E': ['Chief Engineer'],
-  '1/E': ['Chief Engineer', 'Second Engineer'],
-  '2/E': ['Chief Engineer', 'Second Engineer', 'OOW (Engine)'],
-  '3/E': ['Chief Engineer', 'Second Engineer', 'OOW (Engine)'],
-  'Pumpman': ['Pumpman', 'Rating (Engine)', 'Second Engineer'],
-  'Bosun': ['Rating (Deck)', 'AB'],
-  'AB': ['Rating (Deck)', 'AB', 'OOW (Deck)', 'Chief Mate', 'Master Mariner'],
-  'O/S': ['Rating (Deck)', 'AB', 'O/S', 'OOW (Deck)', 'Cadet (Deck)'],
-  'Oiler': ['Rating (Engine)', 'Oiler', 'OOW (Engine)', 'Second Engineer', 'Chief Engineer'],
-  'Wiper': ['Rating (Engine)', 'Oiler', 'Wiper', 'OOW (Engine)', 'Cadet (Engine)'],
-  'Cook': ['Ship\'s Cook'],
-  'Messman': ['Ship\'s Cook', 'Rating (Deck)', 'Rating (Engine)', 'O/S', 'Wiper'],
-  'Cadet': ['Cadet (Deck)', 'Cadet (Engine)']
+const DEFAULT_RANK_COMPETENCY_MATRIX: Record<string, RankDef> = {
+  'Master': { competencies: ['Master Mariner'], checkOverlap: true, order: 10 },
+  'C/O': { competencies: ['Master Mariner', 'Chief Mate'], checkOverlap: true, order: 20 },
+  '2/O': { competencies: ['Master Mariner', 'Chief Mate', 'OOW (Deck)'], checkOverlap: true, order: 30 },
+  '3/O': { competencies: ['Master Mariner', 'Chief Mate', 'OOW (Deck)'], checkOverlap: true, order: 40 },
+  'C/E': { competencies: ['Chief Engineer'], checkOverlap: true, order: 50 },
+  '1/E': { competencies: ['Chief Engineer', 'Second Engineer'], checkOverlap: true, order: 60 },
+  '2/E': { competencies: ['Chief Engineer', 'Second Engineer', 'OOW (Engine)'], checkOverlap: true, order: 70 },
+  '3/E': { competencies: ['Chief Engineer', 'Second Engineer', 'OOW (Engine)'], checkOverlap: true, order: 80 },
+  'Pumpman': { competencies: ['Pumpman', 'Rating (Engine)', 'Second Engineer'], checkOverlap: false, order: 90 }, 
+  'Bosun': { competencies: ['Rating (Deck)', 'AB'], checkOverlap: true, order: 100 },
+  'AB': { competencies: ['Rating (Deck)', 'AB', 'OOW (Deck)', 'Chief Mate', 'Master Mariner'], checkOverlap: false, order: 110 }, 
+  'O/S': { competencies: ['Rating (Deck)', 'AB', 'O/S', 'OOW (Deck)', 'Cadet (Deck)'], checkOverlap: false, order: 120 }, 
+  'Oiler': { competencies: ['Rating (Engine)', 'Oiler', 'OOW (Engine)', 'Second Engineer', 'Chief Engineer'], checkOverlap: false, order: 130 }, 
+  'Wiper': { competencies: ['Rating (Engine)', 'Oiler', 'Wiper', 'OOW (Engine)', 'Cadet (Engine)'], checkOverlap: false, order: 140 }, 
+  'Cook': { competencies: ['Ship\'s Cook'], checkOverlap: true, order: 150 },
+  'Messman': { competencies: ['Ship\'s Cook', 'Rating (Deck)', 'Rating (Engine)', 'O/S', 'Wiper'], checkOverlap: false, order: 160 }, 
+  'Cadet': { competencies: ['Cadet (Deck)', 'Cadet (Engine)'], checkOverlap: false, order: 170 } 
 };
 
 const today = new Date();
@@ -112,12 +127,16 @@ export default function App() {
   const [crews, setCrews] = useState<CrewData[]>([]);
   const [appUsers, setAppUsers] = useState<AppUserData[]>([]);
   
-  const [rankMatrix, setRankMatrix] = useState<Record<string, string[]>>({});
+  const [rankMatrix, setRankMatrix] = useState<Record<string, RankDef>>({});
   
-  const RANKS = useMemo(() => Object.keys(rankMatrix), [rankMatrix]);
+  // Sıralanmış Rank Listesi (Order bazlı)
+  const RANKS = useMemo(() => {
+    return Object.keys(rankMatrix).sort((a, b) => (rankMatrix[a]?.order || 999) - (rankMatrix[b]?.order || 999));
+  }, [rankMatrix]);
+
   const COMPETENCIES = useMemo(() => {
     const comps = new Set<string>();
-    Object.values(rankMatrix).forEach(list => list.forEach(c => comps.add(c)));
+    Object.values(rankMatrix).forEach(def => def.competencies.forEach(c => comps.add(c)));
     return Array.from(comps).sort();
   }, [rankMatrix]);
 
@@ -137,12 +156,15 @@ export default function App() {
   const [overrideWarning, setOverrideWarning] = useState<{message: string, onConfirm: () => void} | null>(null); 
   const [overlapWarning, setOverlapWarning] = useState<{newCrew: CrewData, existingCrew: CrewData, onRelieve: () => void, onAdditional: () => void} | null>(null);
 
+  // YENİ: Notlar Modalı State
+  const [notesEntity, setNotesEntity] = useState<{type: 'ship'|'crew', id: string, name: string} | null>(null);
+
+  const isViewer = appUser?.role === 'viewer';
+
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // @ts-ignore
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          // @ts-ignore
           await signInWithCustomToken(auth, __initial_auth_token);
         } else {
           await signInAnonymously(auth);
@@ -198,7 +220,20 @@ export default function App() {
       if (!matrixDoc) {
         await setDoc(getDocRef('settings', 'rank_matrix'), { data: DEFAULT_RANK_COMPETENCY_MATRIX });
       } else {
-        setRankMatrix(matrixDoc.data().data);
+        const rawData = matrixDoc.data().data;
+        const firstKey = Object.keys(rawData)[0];
+        if (firstKey && Array.isArray(rawData[firstKey])) {
+          // Eski versiyon datayı göç ettir (Migration)
+          const migratedData: Record<string, RankDef> = {};
+          let orderIdx = 10;
+          Object.keys(rawData).forEach(k => {
+            migratedData[k] = { competencies: rawData[k], checkOverlap: true, order: orderIdx };
+            orderIdx += 10;
+          });
+          setRankMatrix(migratedData);
+        } else {
+          setRankMatrix(rawData as Record<string, RankDef>);
+        }
       }
       dataLoadedFlags.settings = true; checkAllLoaded();
     }, (err) => console.error(err));
@@ -237,10 +272,10 @@ export default function App() {
     return alerts;
   }, [ships, crews]);
 
-  const checkCompetencyMatch = (competency: string, rank: string) => (rankMatrix[rank] || []).includes(competency);
+  const checkCompetencyMatch = (competency: string, rank: string) => (rankMatrix[rank]?.competencies || []).includes(competency);
 
-  const handleUpdateMatrixToDb = async (newMatrix: Record<string, string[]>) => { 
-    await setDoc(getDocRef('settings', 'rank_matrix'), { data: newMatrix }, { merge: true }); 
+  const handleUpdateMatrixToDb = async (newMatrix: Record<string, RankDef>) => { 
+    await setDoc(getDocRef('settings', 'rank_matrix'), { data: newMatrix }); 
   };
   const handleAddShipToDb = async (newShipData: Partial<ShipData>) => { 
     const newId = `ship_${Date.now()}`; 
@@ -262,7 +297,7 @@ export default function App() {
         const existingCrewRef = getDocRef('crew', existingCrewToRelieveId);
         const relievedData = crews.find(c => c.id === existingCrewToRelieveId);
         if (relievedData) {
-          await setDoc(existingCrewRef, { ...relievedData, status: 'onleave', shipId: null, rank: null, contractStart: null, contractEnd: null, readinessDate: today.toISOString() });
+          await setDoc(existingCrewRef, { ...relievedData, status: 'onleave', shipId: null, rank: null, contractStart: null, contractEnd: null, readinessDate: today.toISOString() }, { merge: true });
         }
       }
 
@@ -271,14 +306,20 @@ export default function App() {
     };
 
     const checkOverlap = () => {
-      const existingCrew = crews.find(c => c.shipId === newCrewData.shipId && c.status === 'onboard' && c.rank === newCrewData.rank && c.id !== newCrewData.id);
-      if (existingCrew) {
-        setOverlapWarning({
-          newCrew: newCrewData, existingCrew: existingCrew,
-          onRelieve: () => { executeAssignment(true, existingCrew.id); setOverlapWarning(null); },
-          onAdditional: () => { executeAssignment(false); setOverlapWarning(null); }
-        });
-      } else { executeAssignment(false); }
+      const rankDef = rankMatrix[newCrewData.rank || ''];
+      
+      if (rankDef && rankDef.checkOverlap) {
+        const existingCrew = crews.find(c => c.shipId === newCrewData.shipId && c.status === 'onboard' && c.rank === newCrewData.rank && c.id !== newCrewData.id);
+        if (existingCrew) {
+          setOverlapWarning({
+            newCrew: newCrewData, existingCrew: existingCrew,
+            onRelieve: () => { executeAssignment(true, existingCrew.id); setOverlapWarning(null); },
+            onAdditional: () => { executeAssignment(false); setOverlapWarning(null); }
+          });
+        } else { executeAssignment(false); }
+      } else {
+        executeAssignment(false); 
+      }
     };
 
     if (newCrewData.rank && !checkCompetencyMatch(newCrewData.competency, newCrewData.rank)) {
@@ -288,7 +329,7 @@ export default function App() {
 
   const processSignOffDb = async (crewId: string, rejoinDate: string | null) => {
     const c = crews.find(cr => cr.id === crewId);
-    if(c) await setDoc(getDocRef('crew', crewId), { ...c, status: 'onleave', shipId: null, rank: null, contractStart: null, contractEnd: null, readinessDate: rejoinDate ? new Date(rejoinDate).toISOString() : null });
+    if(c) await setDoc(getDocRef('crew', crewId), { ...c, status: 'onleave', shipId: null, rank: null, contractStart: null, contractEnd: null, readinessDate: rejoinDate ? new Date(rejoinDate).toISOString() : null }, { merge: true });
   };
 
   const handleDeleteCrewDb = async (id: string, name: string) => { 
@@ -544,10 +585,74 @@ export default function App() {
           <div className="space-y-3">
             <div><label className="block text-sm font-bold text-gray-700">Username</label><input name="username" defaultValue={editUserData?.username} required className="w-full border p-2 rounded" disabled={isEditing && editUserData?.username === 'admin'} /></div>
             <div><label className="block text-sm font-bold text-gray-700">Password</label><input name="password" defaultValue={editUserData?.password} required type="text" className="w-full border p-2 rounded" /></div>
-            <div><label className="block text-sm font-bold text-gray-700">Role</label><select name="role" defaultValue={editUserData?.role || 'user'} className="w-full border p-2 rounded" disabled={isEditing && editUserData?.username === 'admin'}><option value="user">User</option><option value="admin">Admin</option></select></div>
+            <div>
+              <label className="block text-sm font-bold text-gray-700">Role</label>
+              <select name="role" defaultValue={editUserData?.role || 'user'} className="w-full border p-2 rounded" disabled={isEditing && editUserData?.username === 'admin'}>
+                <option value="user">User (Crewing Dept)</option>
+                <option value="viewer">Viewer (Read-Only + Notes)</option>
+                <option value="admin">Admin (Full Access)</option>
+              </select>
+            </div>
           </div>
           <div className="mt-6 flex justify-end space-x-3"><button type="button" onClick={() => { setShowUserModal(false); setEditUserData(null); }} className="px-4 py-2 border rounded">Cancel</button><button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded font-bold">Save</button></div>
         </form>
+      </div>
+    );
+  };
+
+  // YENİ: Notlar (Notes) Modal
+  const NotesModal = () => {
+    if (!notesEntity) return null;
+    const isShip = notesEntity.type === 'ship';
+    const entity = isShip ? ships.find(s => s.id === notesEntity.id) : crews.find(c => c.id === notesEntity.id);
+    const notes = entity?.notes || [];
+
+    const handleAddNote = async (e: FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      const text = new FormData(e.currentTarget).get('text') as string;
+      if (!text.trim()) return;
+
+      const newNote: Note = { id: Date.now().toString(), text, author: appUser?.username || 'Unknown', date: new Date().toISOString() };
+      const updatedNotes = [...notes, newNote];
+      await setDoc(getDocRef(isShip ? 'ships' : 'crew', notesEntity.id), { notes: updatedNotes }, { merge: true });
+      e.currentTarget.reset();
+    };
+
+    const handleDeleteNote = async (noteId: string) => {
+      if (!window.confirm('Delete note?')) return;
+      const updatedNotes = notes.filter(n => n.id !== noteId);
+      await setDoc(getDocRef(isShip ? 'ships' : 'crew', notesEntity.id), { notes: updatedNotes }, { merge: true });
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-lg flex flex-col max-h-[80vh]">
+          <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
+            <h2 className="text-xl font-bold flex items-center text-gray-800">
+              <MessageSquareText className="mr-2 text-blue-600" /> Notes: {notesEntity.name}
+            </h2>
+            <button onClick={() => setNotesEntity(null)} className="p-2 hover:bg-gray-200 rounded-full"><X size={20} /></button>
+          </div>
+          <div className="p-4 flex-1 overflow-y-auto space-y-3 bg-gray-100">
+            {notes.map(n => (
+              <div key={n.id} className="bg-white p-3 rounded shadow-sm border border-gray-200 relative group">
+                <p className="text-gray-800 text-sm mb-2 pr-6 whitespace-pre-wrap">{n.text}</p>
+                <div className="flex justify-between items-center text-[10px] text-gray-400 font-semibold uppercase">
+                  <span>{n.author}</span>
+                  <span>{new Date(n.date).toLocaleString('en-GB')}</span>
+                </div>
+                <button onClick={() => handleDeleteNote(n.id)} className="absolute top-2 right-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={14}/></button>
+              </div>
+            ))}
+            {notes.length === 0 && <div className="text-center text-gray-500 py-8 text-sm">No notes available.</div>}
+          </div>
+          <div className="p-4 bg-white border-t rounded-b-lg">
+            <form onSubmit={handleAddNote} className="flex gap-2">
+              <textarea name="text" required placeholder="Add a new note..." className="flex-1 border p-2 rounded text-sm resize-none h-10 outline-none focus:ring-1 focus:ring-blue-500" />
+              <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded font-bold hover:bg-blue-700 transition">Post</button>
+            </form>
+          </div>
+        </div>
       </div>
     );
   };
@@ -599,7 +704,10 @@ export default function App() {
 
               return (
                 <div key={ship.id} onClick={() => setSelectedShipId(ship.id)} className={`${ship.color} p-4 rounded-lg shadow cursor-pointer transform transition hover:scale-105 border border-transparent hover:border-gray-400 relative`}>
-                  <div className="flex justify-between items-start mb-4"><h3 className="font-bold text-lg text-gray-800">{ship.name}</h3><span className="bg-white text-xs px-2 py-1 rounded shadow-sm font-semibold">{ship.flag}</span></div>
+                  <div className="flex justify-between items-start mb-4">
+                    <h3 className="font-bold text-lg text-gray-800">{ship.name}</h3>
+                    <span className="bg-white text-xs px-2 py-1 rounded shadow-sm font-semibold">{ship.flag}</span>
+                  </div>
                   <div className="space-y-2 text-sm text-gray-700 mb-4 min-h-[60px]">
                     {isSafeManningLow && <p className="text-red-600 font-semibold flex items-center"><ShieldAlert size={14} className="mr-1"/> Safe Manning not met!</p>}
                     {isCabinExceeded && <p className="text-red-600 font-semibold flex items-center"><AlertTriangle size={14} className="mr-1"/> Cabin capacity exceeded!</p>}
@@ -607,8 +715,17 @@ export default function App() {
                     {expiringSoonCount > 0 && <p className="font-medium text-orange-600">{expiringSoonCount} contract(s) expiring soon</p>}
                     {!isSafeManningLow && !isCabinExceeded && expiredCount === 0 && expiringSoonCount === 0 && <p className="text-green-700">Status normal.</p>}
                   </div>
-                  <div className="border-t border-gray-300/50 pt-2 flex justify-between items-center text-xs text-gray-600">
-                    <div className="flex items-center"><Users size={14} className="mr-1" /> POB: {onboard.length} / {ship.cabinCapacity}</div><div className="flex items-center text-blue-600 font-semibold">View Lineup <ChevronRight size={14} /></div>
+                  <div className="border-t border-gray-300/50 pt-3 flex justify-between items-center text-xs text-gray-600">
+                    <div className="flex items-center"><Users size={14} className="mr-1" /> POB: {onboard.length} / {ship.cabinCapacity}</div>
+                    
+                    <div className="flex items-center gap-3">
+                      {/* NOTLAR BUTONU */}
+                      <button onClick={(e) => { e.stopPropagation(); setNotesEntity({type: 'ship', id: ship.id, name: ship.name}); }} className="relative flex items-center hover:scale-110 transition-transform" title="Notes">
+                        <MessageCircle className={ship.notes?.length ? "text-red-500 fill-red-100" : "text-gray-400"} size={24} />
+                        {ship.notes && ship.notes.length > 0 && <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-red-800">{ship.notes.length}</span>}
+                      </button>
+                      <div className="flex items-center text-blue-600 font-semibold">Lineup <ChevronRight size={14} /></div>
+                    </div>
                   </div>
                 </div>
               );
@@ -627,8 +744,18 @@ export default function App() {
               {waitingList.map((crew) => (
                 <div key={crew.id} className="border-l-4 border-blue-500 bg-gray-50 p-3 rounded shadow-sm">
                   <div className="flex justify-between items-start">
-                    <div className="max-w-[70%]"><span className="font-bold text-gray-800 block truncate" title={crew.name}>{crew.name}</span><span className="text-xs text-gray-500 block truncate">{crew.competency}</span></div>
-                    <button onClick={() => setAssignCrewData(crew)} className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold hover:bg-blue-600 hover:text-white transition flex items-center"><UserPlus size={12} className="mr-1"/> Assign</button>
+                    <div className="max-w-[70%]">
+                      <div className="flex items-center">
+                        <span className="font-bold text-gray-800 block truncate" title={crew.name}>{crew.name}</span>
+                        {/* KİŞİ NOTLARI BUTONU */}
+                        <button onClick={(e) => { e.stopPropagation(); setNotesEntity({type: 'crew', id: crew.id, name: crew.name}); }} className="relative flex items-center hover:scale-110 transition-transform ml-2" title="Notes">
+                          <MessageCircle className={crew.notes?.length ? "text-red-500 fill-red-100" : "text-gray-300"} size={18} />
+                          {crew.notes && crew.notes.length > 0 && <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-red-800">{crew.notes.length}</span>}
+                        </button>
+                      </div>
+                      <span className="text-xs text-gray-500 block truncate">{crew.competency}</span>
+                    </div>
+                    {!isViewer && <button onClick={() => setAssignCrewData(crew)} className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold hover:bg-blue-600 hover:text-white transition flex items-center"><UserPlus size={12} className="mr-1"/> Assign</button>}
                   </div>
                   <div className="mt-2 text-xs text-gray-600"><span className="text-gray-400">Readiness: </span>{crew.readinessDate ? new Date(crew.readinessDate).toLocaleDateString('en-GB') : 'TBA'}</div>
                 </div>
@@ -646,21 +773,33 @@ export default function App() {
     const ship = ships.find(s => s.id === selectedShipId);
     if (!ship) return null;
     
+    // Sort ranks based on Matrix Order
     const onboard = crews
       .filter(c => c.shipId === selectedShipId && c.status === 'onboard')
-      .sort((a, b) => RANKS.indexOf(a.rank || '') - RANKS.indexOf(b.rank || ''));
+      .sort((a, b) => {
+        const orderA = rankMatrix[a.rank || '']?.order || 999;
+        const orderB = rankMatrix[b.rank || '']?.order || 999;
+        return orderA - orderB;
+      });
 
-    const timelineSpan = 120; // 4 Aylık görünüm
+    const timelineSpan = 120; 
     const months = Array.from({length: 4}).map((_,i) => {
       const d = new Date(); d.setMonth(d.getMonth() + i); return d.toLocaleString('en-GB', { month: 'short', year: 'numeric' });
     });
 
     return (
       <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
-          <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[95vh] flex flex-col">
+          <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-lg shrink-0">
             <div>
-              <h2 className="text-2xl font-bold text-gray-800">{ship.name} - Crew Lineup & Planning</h2>
+              <h2 className="text-2xl font-bold text-gray-800 flex items-center">
+                {ship.name} - Lineup
+                {/* GEMİ NOTLARI BUTONU */}
+                <button onClick={(e) => { e.stopPropagation(); setNotesEntity({type: 'ship', id: ship.id, name: ship.name}); }} className="relative flex items-center hover:scale-110 transition-transform ml-3" title="Notes">
+                  <MessageCircle className={ship.notes?.length ? "text-red-500 fill-red-100" : "text-gray-300"} size={28} />
+                  {ship.notes && ship.notes.length > 0 && <span className="absolute inset-0 flex items-center justify-center text-[12px] font-bold text-red-800">{ship.notes.length}</span>}
+                </button>
+              </h2>
               <div className="text-sm text-gray-500 mt-1 flex gap-4">
                 <span>Safe Manning: <strong className={onboard.length < ship.minSafeManning ? 'text-red-500' : ''}>{onboard.length}/{ship.minSafeManning}</strong></span>
                 <span>Cabin Cap: <strong className={onboard.length > ship.cabinCapacity ? 'text-red-500' : ''}>{onboard.length}/{ship.cabinCapacity}</strong></span>
@@ -669,9 +808,9 @@ export default function App() {
             <button onClick={() => setSelectedShipId(null)} className="p-2 hover:bg-gray-200 rounded-full"><X size={24} /></button>
           </div>
           
-          <div className="p-4 flex-1 overflow-auto">
-            <div className="flex border-b pb-2 mb-4 sticky top-0 bg-white z-20 text-sm font-bold text-gray-600">
-              <div className="w-1/4">Personnel Info</div>
+          <div className="p-2 flex-1 overflow-auto bg-white">
+            <div className="flex border-b pb-2 mb-2 sticky top-0 bg-white z-20 text-xs font-bold text-gray-600">
+              <div className="w-1/4 pl-2">Personnel Info</div>
               <div className="w-3/4 flex pr-6">
                 <div className="w-1/4 border-l pl-2 text-center text-blue-600">{months[0]}</div>
                 <div className="w-1/4 border-l pl-2 text-center">{months[1]}</div>
@@ -680,8 +819,8 @@ export default function App() {
               </div>
             </div>
             
-            <div className="space-y-4">
-              {onboard.map(crew => {
+            <div className="space-y-0 relative">
+              {onboard.map((crew, idx) => {
                 const startOffset = calculateDaysRemaining(crew.contractStart);
                 const endOffset = calculateDaysRemaining(crew.contractEnd);
                 
@@ -708,32 +847,46 @@ export default function App() {
                     : 'repeating-linear-gradient(45deg, rgba(255,255,255,0.25), rgba(255,255,255,0.25) 8px, transparent 8px, transparent 16px)'
                 } : {};
 
+                // Aynı görevdeki personellerin margin'i silindi (dipdibe olması için)
+                const prevCrew = idx > 0 ? onboard[idx - 1] : null;
+                const isSameRankAsPrev = prevCrew?.rank === crew.rank;
+
                 return (
-                  <div key={crew.id} className="flex items-center text-sm border-b border-gray-100 pb-3 hover:bg-gray-50 p-2 rounded group">
+                  <div 
+                    key={crew.id} 
+                    className={`flex items-center text-xs hover:bg-gray-50 px-2 group ${isSameRankAsPrev ? 'py-0 border-t-0' : 'pt-2 pb-1 border-t border-gray-200 mt-1'}`}
+                  >
                     <div className="w-1/4 flex justify-between items-center pr-2">
-                      <div>
-                        <div className="font-bold text-gray-800 truncate" title={crew.name}>{crew.name}</div>
-                        <div className="text-gray-500 text-xs flex gap-1">
+                      <div className="flex flex-col">
+                        <div className="flex items-center">
+                          <span className="font-bold text-gray-800 truncate leading-tight" title={crew.name}>{crew.name}</span>
+                          {/* KİŞİ NOTLARI BUTONU */}
+                          <button onClick={(e) => { e.stopPropagation(); setNotesEntity({type: 'crew', id: crew.id, name: crew.name}); }} className="relative flex items-center hover:scale-110 transition-transform ml-1" title="Notes">
+                            <MessageCircle className={crew.notes?.length ? "text-red-500 fill-red-100" : "text-gray-300"} size={16} />
+                            {crew.notes && crew.notes.length > 0 && <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-red-800">{crew.notes.length}</span>}
+                          </button>
+                        </div>
+                        <div className="text-gray-500 text-[10px] flex gap-1 leading-tight mt-0.5">
                           <span className={`font-bold ${isPlanned ? 'text-blue-500' : 'text-gray-800'}`}>{crew.rank}</span> 
                           <span className="truncate" title={crew.competency}>({crew.competency})</span>
                         </div>
                       </div>
-                      <button onClick={() => setSignOffCrewData(crew)} className="opacity-0 group-hover:opacity-100 text-red-500 hover:bg-red-100 p-1.5 rounded transition-all" title="Sign-off from vessel"><LogOut size={16} /></button>
+                      {!isViewer && <button onClick={() => setSignOffCrewData(crew)} className="opacity-0 group-hover:opacity-100 text-red-500 hover:bg-red-100 p-1 rounded transition-all" title="Sign-off from vessel"><LogOut size={14} /></button>}
                     </div>
 
-                    <div className="w-3/4 flex relative h-10 items-center bg-gray-100 rounded pr-6">
-                      <div className="absolute left-1/4 top-0 h-full border-l border-dashed border-gray-300 w-1/4 z-0"></div>
-                      <div className="absolute left-2/4 top-0 h-full border-l border-dashed border-gray-300 w-1/4 z-0"></div>
-                      <div className="absolute left-3/4 top-0 h-full border-l border-dashed border-gray-300 w-1/4 z-0"></div>
+                    <div className="w-3/4 flex relative h-6 items-center rounded pr-6 overflow-visible">
+                      <div className="absolute left-1/4 top-0 h-full border-l border-dashed border-gray-200 w-1/4 z-0"></div>
+                      <div className="absolute left-2/4 top-0 h-full border-l border-dashed border-gray-200 w-1/4 z-0"></div>
+                      <div className="absolute left-3/4 top-0 h-full border-l border-dashed border-gray-200 w-1/4 z-0"></div>
                       
                       {isExpired ? (
-                        <div className="relative z-10 pl-2 text-red-600 font-bold flex items-center">
-                          <AlertTriangle size={14} className="mr-1"/> Expired ({Math.abs(endOffset)} days)
+                        <div className="relative z-10 pl-2 text-red-600 font-bold flex items-center text-[10px]">
+                          <AlertTriangle size={12} className="mr-1"/> Expired ({Math.abs(endOffset)}d)
                         </div>
                       ) : (
-                        <div className="absolute h-6 flex items-center z-10" style={{ left: `${leftPercent}%`, width: `${widthPercent}%`, minWidth: '40px' }}>
+                        <div className="absolute h-[18px] flex items-center z-10" style={{ left: `${leftPercent}%`, width: `${widthPercent}%`, minWidth: '40px' }}>
                           <div 
-                            className={`h-full w-full rounded-md shadow-sm flex items-center justify-center text-[10px] font-bold overflow-hidden transition-all duration-300
+                            className={`h-full w-full rounded shadow-sm flex items-center justify-center text-[9px] font-bold overflow-hidden transition-all duration-300
                               ${isPlanned ? `border-2 border-dashed ${colors.border} ${colors.light} ${colors.text}` : `${colors.bg} text-white`}`
                             }
                             style={stripeStyle}
@@ -742,20 +895,22 @@ export default function App() {
                             {isPlanned ? 'PLANNED' : ''}
                           </div>
 
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); setEditCrewData(crew); setShowCrewModal(true); }}
-                            className={`absolute -right-6 p-0.5 rounded-full hover:bg-gray-200 transition-transform hover:scale-110 ${colors.text}`}
-                            title="Extension / Edit Contract"
-                          >
-                            <ChevronRight size={18} strokeWidth={3} />
-                          </button>
+                          {!isViewer && (
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); setEditCrewData(crew); setShowCrewModal(true); }}
+                              className={`absolute -right-5 p-0.5 rounded-full hover:bg-gray-200 transition-transform hover:scale-110 ${colors.text}`}
+                              title="Extension / Edit Contract"
+                            >
+                              <ChevronRight size={14} strokeWidth={3} />
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
                   </div>
                 );
               })}
-              {onboard.length === 0 && <div className="text-center text-gray-500 py-8">No personnel onboard.</div>}
+              {onboard.length === 0 && <div className="text-center text-gray-500 py-8 text-sm">No personnel onboard.</div>}
             </div>
           </div>
         </div>
@@ -855,10 +1010,24 @@ export default function App() {
     const [newRankName, setNewRankName] = useState('');
     const [addingCompToRank, setAddingCompToRank] = useState<string | null>(null);
 
+    const handleMoveRank = (rank: string, direction: 'up' | 'down') => {
+      const sorted = [...RANKS];
+      const idx = sorted.indexOf(rank);
+      if (direction === 'up' && idx > 0) {
+        [sorted[idx - 1], sorted[idx]] = [sorted[idx], sorted[idx - 1]];
+      } else if (direction === 'down' && idx < sorted.length - 1) {
+        [sorted[idx + 1], sorted[idx]] = [sorted[idx], sorted[idx + 1]];
+      } else return;
+      
+      const newMatrix = { ...rankMatrix };
+      sorted.forEach((r, i) => { newMatrix[r] = { ...newMatrix[r], order: (i + 1) * 10 }; });
+      handleUpdateMatrixToDb(newMatrix);
+    };
+
     const handleAddRank = (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       if (!newRankName.trim()) return;
-      const updatedMatrix = { ...rankMatrix, [newRankName.trim()]: [] };
+      const updatedMatrix = { ...rankMatrix, [newRankName.trim()]: { competencies: [], checkOverlap: true, order: (RANKS.length + 1) * 10 } };
       handleUpdateMatrixToDb(updatedMatrix);
       setNewRankName('');
     };
@@ -873,19 +1042,26 @@ export default function App() {
 
     const handleAddCompetency = (rank: string, compToAdd: string) => {
       if (!compToAdd.trim()) return;
-      const currentList = rankMatrix[rank] || [];
-      if (currentList.includes(compToAdd.trim())) return;
+      const currentDef = rankMatrix[rank] || { competencies: [], checkOverlap: true, order: 999 };
+      if (currentDef.competencies.includes(compToAdd.trim())) return;
 
-      const updatedMatrix = { ...rankMatrix, [rank]: [...currentList, compToAdd.trim()] };
+      const updatedMatrix = { ...rankMatrix, [rank]: { ...currentDef, competencies: [...currentDef.competencies, compToAdd.trim()] } };
       handleUpdateMatrixToDb(updatedMatrix);
       setAddingCompToRank(null);
     };
 
     const handleDeleteCompetency = (rank: string, compToDelete: string) => {
       if (window.confirm(`Remove '${compToDelete}' competency from rank '${rank}'?`)) {
-        const updatedMatrix = { ...rankMatrix, [rank]: (rankMatrix[rank] || []).filter(c => c !== compToDelete) };
+        const currentDef = rankMatrix[rank];
+        const updatedMatrix = { ...rankMatrix, [rank]: { ...currentDef, competencies: currentDef.competencies.filter(c => c !== compToDelete) } };
         handleUpdateMatrixToDb(updatedMatrix);
       }
+    };
+
+    const handleToggleOverlap = (rank: string, isChecked: boolean) => {
+      const currentDef = rankMatrix[rank];
+      const updatedMatrix = { ...rankMatrix, [rank]: { ...currentDef, checkOverlap: isChecked } };
+      handleUpdateMatrixToDb(updatedMatrix);
     };
 
     const InlineAddCompForm = ({ rank }: { rank: string }) => {
@@ -902,27 +1078,37 @@ export default function App() {
     return (
       <div className="p-6 h-full overflow-y-auto bg-gray-50">
         <h2 className="text-2xl font-bold mb-2 text-gray-800 flex items-center"><TableProperties className="mr-3" /> Rank - Competency Compliance Matrix</h2>
-        <p className="text-gray-600 mb-6 border-b pb-4">Define acceptable competencies (licenses/certificates) for each rank here. The values added here will automatically populate the dropdown menus throughout the system.</p>
+        <p className="text-gray-600 mb-6 border-b pb-4">Define acceptable competencies, overlap rules and hierarchy order for each rank here. The values added here will automatically populate the dropdown menus throughout the system.</p>
 
         <datalist id="matrix-comp-list">{COMPETENCIES.map(c => <option key={c} value={c} />)}</datalist>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-100 text-slate-700 border-b border-gray-200">
+              <tr className="bg-slate-100 text-slate-700 border-b border-gray-200 text-sm">
+                <th className="p-4 font-bold w-12 text-center">Order</th>
                 <th className="p-4 font-bold w-1/4">Rank (Position)</th>
-                <th className="p-4 font-bold w-16 text-center">Action</th>
+                <th className="p-4 font-bold w-24 text-center" title="Warn when multiple crew assigned">Overlap?</th>
                 <th className="p-4 font-bold w-full">Accepted Competencies</th>
+                <th className="p-4 font-bold w-16 text-center">Action</th>
               </tr>
             </thead>
             <tbody>
-              {RANKS.map(rank => (
-                <tr key={rank} className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
-                  <td className="p-4 font-bold text-gray-800 align-top">{rank}</td>
-                  <td className="p-4 align-top text-center"><button onClick={() => handleDeleteRank(rank)} className="text-red-400 hover:text-red-600 p-2 rounded bg-white shadow-sm border" title="Delete Rank"><Trash2 size={16} /></button></td>
-                  <td className="p-4 align-top">
+              {RANKS.map((rank, idx) => (
+                <tr key={rank} className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors group">
+                  <td className="p-2 align-middle text-center">
+                    <div className="flex flex-col items-center opacity-20 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => handleMoveRank(rank, 'up')} disabled={idx===0} className="hover:text-blue-600 disabled:opacity-30"><ArrowUp size={16}/></button>
+                      <button onClick={() => handleMoveRank(rank, 'down')} disabled={idx===RANKS.length-1} className="hover:text-blue-600 disabled:opacity-30"><ArrowDown size={16}/></button>
+                    </div>
+                  </td>
+                  <td className="p-4 font-bold text-gray-800 align-middle">{rank}</td>
+                  <td className="p-4 align-middle text-center">
+                    <input type="checkbox" className="w-4 h-4 text-blue-600 rounded cursor-pointer" checked={rankMatrix[rank]?.checkOverlap ?? true} onChange={(e) => handleToggleOverlap(rank, e.target.checked)} title="Warn on overlap" />
+                  </td>
+                  <td className="p-4 align-middle">
                     <div className="flex flex-wrap gap-2 items-center">
-                      {(rankMatrix[rank] || []).map(comp => (
+                      {(rankMatrix[rank]?.competencies || []).map(comp => (
                         <div key={comp} className="flex items-center bg-blue-50 border border-blue-200 text-blue-800 px-3 py-1.5 rounded-full text-sm font-medium shadow-sm">
                           {comp}<button onClick={() => handleDeleteCompetency(rank, comp)} className="ml-2 text-blue-400 hover:text-red-500 transition-colors"><X size={14} /></button>
                         </div>
@@ -930,9 +1116,10 @@ export default function App() {
                       {addingCompToRank === rank ? <InlineAddCompForm rank={rank} /> : <button onClick={() => setAddingCompToRank(rank)} className="flex items-center text-sm font-bold text-blue-600 hover:bg-blue-50 border border-dashed border-blue-300 px-3 py-1.5 rounded-full transition-colors"><Plus size={16} className="mr-1" /> Add</button>}
                     </div>
                   </td>
+                  <td className="p-4 align-middle text-center"><button onClick={() => handleDeleteRank(rank)} className="text-red-400 hover:text-red-600 p-2 rounded bg-white shadow-sm border" title="Delete Rank"><Trash2 size={16} /></button></td>
                 </tr>
               ))}
-              {RANKS.length === 0 && (<tr><td colSpan={3} className="p-8 text-center text-gray-500">No ranks defined in the matrix yet.</td></tr>)}
+              {RANKS.length === 0 && (<tr><td colSpan={5} className="p-8 text-center text-gray-500">No ranks defined in the matrix yet.</td></tr>)}
             </tbody>
           </table>
           <div className="p-4 bg-gray-50 border-t border-gray-200">
@@ -949,16 +1136,18 @@ export default function App() {
   return (
     <div className="h-screen w-full flex flex-col font-sans bg-gray-200 text-gray-900 overflow-hidden">
       <header className="bg-slate-900 text-white p-4 shadow-md z-10 flex justify-between items-center">
-        <div className="flex items-center"><Anchor className="mr-3" size={28} /><h1 className="text-xl font-bold tracking-wider">CREW MASTER PRO</h1></div>
-        <div className="flex items-center space-x-4">
-          <nav className="flex space-x-2">
-            <button onClick={() => setActiveTab('dashboard')} className={`flex items-center px-4 py-2 rounded transition-colors ${activeTab === 'dashboard' ? 'bg-slate-700 font-bold' : 'hover:bg-slate-800'}`}><LayoutDashboard size={18} className="mr-2" /> Dashboard</button>
+        <div className="flex items-center"><Anchor className="mr-3" size={28} /><h1 className="text-xl font-bold tracking-wider hidden sm:block">CREW MASTER PRO</h1></div>
+        <div className="flex items-center space-x-2 md:space-x-4">
+          <nav className="flex space-x-1 md:space-x-2">
+            <button onClick={() => setActiveTab('dashboard')} className={`flex items-center px-3 py-2 rounded transition-colors text-sm md:text-base ${activeTab === 'dashboard' ? 'bg-slate-700 font-bold' : 'hover:bg-slate-800'}`}><LayoutDashboard size={18} className="mr-1 md:mr-2" /> Dashboard</button>
             {appUser?.role === 'admin' && (
-              <button onClick={() => setActiveTab('matrix')} className={`flex items-center px-4 py-2 rounded transition-colors ${activeTab === 'matrix' ? 'bg-slate-700 font-bold' : 'hover:bg-slate-800'}`}><TableProperties size={18} className="mr-2" /> Compliance Matrix</button>
+              <button onClick={() => setActiveTab('matrix')} className={`flex items-center px-3 py-2 rounded transition-colors text-sm md:text-base ${activeTab === 'matrix' ? 'bg-slate-700 font-bold' : 'hover:bg-slate-800'}`}><TableProperties size={18} className="mr-1 md:mr-2" /> Matrix</button>
             )}
-            <button onClick={() => setActiveTab('admin')} className={`flex items-center px-4 py-2 rounded transition-colors ${activeTab === 'admin' ? 'bg-slate-700 font-bold' : 'hover:bg-slate-800'}`}><Settings size={18} className="mr-2" /> Settings</button>
+            {!isViewer && (
+              <button onClick={() => setActiveTab('admin')} className={`flex items-center px-3 py-2 rounded transition-colors text-sm md:text-base ${activeTab === 'admin' ? 'bg-slate-700 font-bold' : 'hover:bg-slate-800'}`}><Settings size={18} className="mr-1 md:mr-2" /> Settings</button>
+            )}
           </nav>
-          <div className="h-6 w-px bg-slate-600 mx-2"></div>
+          <div className="h-6 w-px bg-slate-600 mx-1 md:mx-2"></div>
           <div className="flex items-center">
             <span className="mr-3 text-sm text-slate-300 hidden md:block">Hi, <strong>{appUser?.username}</strong></span>
             <button onClick={() => setAppUser(null)} className="text-red-400 hover:text-red-300 hover:bg-slate-800 p-2 rounded flex items-center transition" title="Secure Logout"><LogOut size={20} /></button>
@@ -968,7 +1157,7 @@ export default function App() {
       <main className="flex-1 overflow-hidden relative">
         {activeTab === 'dashboard' && <Dashboard />}
         {activeTab === 'matrix' && <ComplianceMatrixPanel />}
-        {activeTab === 'admin' && <AdminPanel />}
+        {activeTab === 'admin' && !isViewer && <AdminPanel />}
         
         <ShipDetailsModal />
         <ShipFormModal />
@@ -978,6 +1167,7 @@ export default function App() {
         <HandoverModal />
         <SignOffModal />
         <SystemUserFormModal />
+        <NotesModal />
       </main>
     </div>
   );
