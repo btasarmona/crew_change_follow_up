@@ -4,8 +4,18 @@ import {
   Users, Ship, LayoutDashboard, FileCheck, Star, Settings, 
   MessageCircle, AlertTriangle, Calendar, Plus, X, Search, 
   ChevronRight, ChevronDown, ChevronUp, UserCheck, 
-  Archive, Edit2, LogOut, UserPlus, Trash2, Filter, Info
+  Archive, Edit2, LogOut, UserPlus, Trash2, Filter, Info, RotateCcw
 } from 'lucide-react';
+
+// --- CUSTOM LOGO COMPONENT ---
+const ArmonaLogo = ({ className = "w-8 h-8" }) => (
+  <img 
+    src="https://www.atlantis-tankers.com/assets/images/logo.png" 
+    alt="Armona Crew Manager Logo" 
+    className={`${className} object-contain`}
+  />
+);
+
 
 const firebaseConfig = {
   apiKey: "AIzaSyBodyi-nGpL7TExhyxJQkL5boZxVzB-NKs",
@@ -19,8 +29,8 @@ const firebaseConfig = {
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
 const initialMatrix = [
-  { id: 'm1', rank: 'Master', dept: 'Deck', checkOverlap: true, competencies: ['Master Mariner'] },
-  { id: 'm2', rank: 'Chief Officer', dept: 'Deck', checkOverlap: true, competencies: ['Master Mariner', 'Chief Mate'] },
+  { id: 'm1', rank: 'Master', dept: 'Deck', checkOverlap: true, competencies: ['Master Mariner', 'Chief Mate'] },
+  { id: 'm2', rank: 'Chief Officer', dept: 'Deck', checkOverlap: true, competencies: ['Master Mariner', 'Chief Mate', 'OOW (Deck)'] },
   { id: 'm3', rank: 'Second Officer', dept: 'Deck', checkOverlap: true, competencies: ['OOW (Deck)'] },
   { id: 'm4', rank: 'Chief Engineer', dept: 'Engine', checkOverlap: true, competencies: ['Chief Engineer Unlimited'] },
   { id: 'm5', rank: 'Second Engineer', dept: 'Engine', checkOverlap: true, competencies: ['Chief Engineer Unlimited', 'Second Engineer Unlimited'] },
@@ -74,7 +84,7 @@ const initialDebriefings = [
 // --- MAIN APP COMPONENT ---
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState(null); // default to null for Login
+  const [currentUser, setCurrentUser] = useState(null); 
   const [activeTab, setActiveTab] = useState('dashboard');
   
   const [ships, setShips] = useState(initialShips);
@@ -166,8 +176,9 @@ export default function App() {
     <div className="flex flex-col h-screen bg-[#f1f5f9] text-slate-800 font-sans">
       {/* Top Navbar */}
       <header className="bg-[#0f172a] text-white px-6 py-3 flex justify-between items-center shadow-md z-10 shrink-0">
-        <div className="font-bold text-xl flex items-center gap-2 tracking-wide w-64">
-          <Ship className="text-blue-400" /> CREW MASTER PRO
+        <div className="font-bold text-base flex items-center gap-3 tracking-wide w-72">
+          <ArmonaLogo className="w-7 h-7" />
+          ARMONA CREW MANAGER
         </div>
         
         <nav className="flex-1 flex justify-center items-center gap-2 overflow-x-auto mx-4">
@@ -176,7 +187,7 @@ export default function App() {
           <TopNavItem icon={<Star />} label="Eval Overview" active={activeTab === 'eval_overview'} onClick={() => setActiveTab('eval_overview')} />
           {currentUser.role !== 'viewer' && <TopNavItem icon={<Plus />} label="Add Eval" active={activeTab === 'eval_add'} onClick={() => setActiveTab('eval_add')} />}
           <TopNavItem icon={<UserCheck />} label="Debriefings" active={activeTab === 'debriefings'} onClick={() => setActiveTab('debriefings')} badge={activeDebriefsCount} />
-          {currentUser.role === 'admin' && <TopNavItem icon={<Settings />} label="Settings & Matrix" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />}
+          {currentUser.role === 'admin' && <TopNavItem icon={<Settings />} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />}
         </nav>
 
         <div className="flex items-center gap-4 border-l border-slate-700 pl-6 shrink-0">
@@ -224,7 +235,12 @@ export default function App() {
               }}
             />
           )}
-          {activeTab === 'eval_overview' && <EvaluationsOverview evals={evaluations} ships={ships} matrix={matrix} />}
+          {activeTab === 'eval_overview' && (
+             <EvaluationsOverview 
+               evals={evaluations} ships={ships} matrix={matrix} currentUser={currentUser}
+               onDelete={(id) => setEvaluations(prev => prev.filter(e => e.id !== id))}
+             />
+          )}
           {activeTab === 'eval_add' && currentUser.role !== 'viewer' && (
             <EvaluationsAdd 
               currentUser={currentUser} crew={crew} ships={ships} prefillData={evalPrefill}
@@ -248,6 +264,7 @@ export default function App() {
               matrix={matrix} setMatrix={setMatrix} 
               procSchema={procSchema} setProcSchema={setProcSchema} 
               users={users} setUsers={setUsers} 
+              ships={ships} setShips={setShips}
               currentUser={currentUser} setCurrentUser={setCurrentUser} 
             />
           )}
@@ -342,11 +359,11 @@ function TopNavItem({ icon, label, active, onClick, badge }) {
     >
       {React.cloneElement(icon, { size: 16 })} 
       {label}
-      {badge && badge > 0 ? (
+      {badge > 0 && (
         <span className="ml-1.5 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center justify-center shadow-sm">
           {badge}
         </span>
-      ) : null}
+      )}
     </button>
   );
 }
@@ -800,7 +817,12 @@ function Procedures({ procedures, schema, currentUser, onUpdateProc, onUpdateDyn
                         <button onClick={() => onUpdateProc(p.id, 'status', 'archive')} title="Archive" className="text-slate-400 hover:text-slate-700 ml-2 transition-colors"><Archive size={18}/></button>
                       </div>
                     ) : (
-                      <span className="text-xs text-slate-400 italic bg-slate-100 px-2 py-1 rounded">Archived</span>
+                      <div className="flex justify-end items-center">
+                         {currentUser.role === 'admin' && (
+                           <button onClick={() => onUpdateProc(p.id, 'status', 'active')} title="Restore to Active" className="text-slate-400 hover:text-blue-500 flex items-center gap-1 text-xs font-medium"><RotateCcw size={14}/> Restore</button>
+                         )}
+                         {currentUser.role !== 'admin' && <span className="text-xs text-slate-400 italic bg-slate-100 px-2 py-1 rounded">Archived</span>}
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -814,7 +836,7 @@ function Procedures({ procedures, schema, currentUser, onUpdateProc, onUpdateDyn
   );
 }
 
-function EvaluationsOverview({ evals, ships, matrix }) {
+function EvaluationsOverview({ evals, ships, matrix, currentUser, onDelete }) {
   const [fRank, setFRank] = useState('');
   const [fName, setFName] = useState('');
   const [fVessel, setFVessel] = useState('');
@@ -872,7 +894,7 @@ function EvaluationsOverview({ evals, ships, matrix }) {
         <div className="overflow-x-auto flex-1">
           <table className="w-full text-sm text-left whitespace-nowrap">
             <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200 sticky top-0">
-              <tr><th className="px-4 py-3 font-semibold">Date</th><th className="px-4 py-3 font-semibold">Crew Name</th><th className="px-4 py-3 font-semibold">Rank</th><th className="px-4 py-3 font-semibold">Vessel</th><th className="px-4 py-3 font-semibold">Score</th><th className="px-4 py-3 font-semibold">Evaluator</th></tr>
+              <tr><th className="px-4 py-3 font-semibold">Date</th><th className="px-4 py-3 font-semibold">Crew Name</th><th className="px-4 py-3 font-semibold">Rank</th><th className="px-4 py-3 font-semibold">Vessel</th><th className="px-4 py-3 font-semibold">Score</th><th className="px-4 py-3 font-semibold">Evaluator</th>{currentUser.role === 'admin' && <th className="px-4 py-3 font-semibold text-right">Undo</th>}</tr>
             </thead>
             <tbody>
               {displayEvals.map(e => {
@@ -885,10 +907,15 @@ function EvaluationsOverview({ evals, ships, matrix }) {
                     <td className="px-4 py-3 text-slate-600">{e.shipName}</td>
                     <td className={`px-4 py-3 ${isLowScore ? 'text-red-600 font-bold' : 'font-bold text-slate-800'}`}>{e.score}/100</td>
                     <td className="px-4 py-3 text-slate-600">{e.evaluatedBy}</td>
+                    {currentUser.role === 'admin' && (
+                       <td className="px-4 py-3 text-right">
+                         <button onClick={()=>onDelete(e.id)} className="text-slate-300 hover:text-red-500" title="Delete Evaluation"><Trash2 size={16}/></button>
+                       </td>
+                    )}
                   </tr>
                 );
               })}
-              {displayEvals.length===0 && <tr><td colSpan={6} className="text-center py-10 text-slate-400">No matching evaluations.</td></tr>}
+              {displayEvals.length===0 && <tr><td colSpan={7} className="text-center py-10 text-slate-400">No matching evaluations.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -1097,7 +1124,12 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept }) {
                            <button onClick={() => onUpdate(d.id, 'status', 'archived')} className="text-emerald-600 hover:bg-emerald-50 px-2 py-1 rounded border border-emerald-200 font-medium text-xs">Complete</button>
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-400 italic bg-slate-100 px-2 py-1 rounded">Archived</span>
+                        <div className="flex justify-end items-center">
+                           {currentUser.role === 'admin' && (
+                             <button onClick={() => onUpdate(d.id, 'status', 'active')} title="Restore to Active" className="text-slate-400 hover:text-blue-500 flex items-center gap-1 text-xs font-medium"><RotateCcw size={14}/> Restore</button>
+                           )}
+                           {currentUser.role !== 'admin' && <span className="text-xs text-slate-400 italic bg-slate-100 px-2 py-1 rounded">Archived</span>}
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -1178,15 +1210,19 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept }) {
     );
   }
 
-function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, users, setUsers, currentUser, setCurrentUser }) {
+function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, users, setUsers, ships, setShips, currentUser, setCurrentUser }) {
   const [newCol, setNewCol] = useState({ name: '', type: 'checkbox', appliesTo: 'both' });
   const [newRank, setNewRank] = useState({ rank: '', dept: 'Deck', checkOverlap: false, competencies: [] });
   const [newCompText, setNewCompText] = useState({});
   const [newUser, setNewUser] = useState({ username: '', password: '', role: 'user' });
+  const [newShip, setNewShip] = useState({ name: '', flag: 'TBA', minSafeManning: 10, cabinCapacity: 15, lsaCapacity: 20, color: 'blue' });
 
-  // User Edit State
+  // Edit States
   const [editingUserId, setEditingUserId] = useState(null);
   const [editUserData, setEditUserData] = useState({});
+  
+  const [editingShipId, setEditingShipId] = useState(null);
+  const [editShipData, setEditShipData] = useState({});
 
   const moveMatrix = (index, dir) => {
     if ((dir === -1 && index === 0) || (dir === 1 && index === matrix.length - 1)) return;
@@ -1238,11 +1274,18 @@ function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, users, set
     if (users.find(u => u.id === id)?.role === 'admin') return; 
     setUsers(users.filter(u => u.id !== id));
   };
+  
+  const addShip = () => {
+    if(!newShip.name) return;
+    setShips([...ships, { ...newShip, id: 's'+Date.now(), notes: [] }]);
+    setNewShip({ name: '', flag: 'TBA', minSafeManning: 10, cabinCapacity: 15, lsaCapacity: 20, color: 'blue' });
+  };
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-slate-800">System Administration</h1>
       
+      {/* 1. USER MANAGEMENT */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
         <h2 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><Users size={20} className="text-indigo-500"/> User Management</h2>
         <p className="text-sm text-slate-500 mb-4 bg-slate-50 p-3 rounded border border-slate-100">Add, edit, or remove users. Admins can update their own username/password here. Viewers have read-only access and can only add notes.</p>
@@ -1311,6 +1354,79 @@ function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, users, set
                   </select>
                 </td>
                 <td className="p-3 text-right"><button onClick={addUser} disabled={!newUser.username || !newUser.password} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm font-bold disabled:opacity-50">Add User</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 2. FLEET MANAGEMENT */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <h2 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><Ship size={20} className="text-teal-500"/> Fleet Management</h2>
+        <p className="text-sm text-slate-500 mb-4 bg-slate-50 p-3 rounded border border-slate-100">Add new vessels to your fleet, update their capacities and manning requirements, or remove them.</p>
+        
+        <div className="overflow-x-auto mb-4">
+          <table className="w-full text-sm text-left border border-slate-200 rounded-lg whitespace-nowrap bg-white">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+              <tr><th className="p-3">Vessel Name</th><th className="p-3">Flag</th><th className="p-3 text-center">Min Safe</th><th className="p-3 text-center">Cabin Cap</th><th className="p-3 text-center">LSA Cap</th><th className="p-3 text-center">Color</th><th className="p-3 text-right">Actions</th></tr>
+            </thead>
+            <tbody>
+              {ships.map(s => {
+                const isEditing = editingShipId === s.id;
+                return (
+                  <tr key={s.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                    <td className="p-3 font-bold text-slate-800">
+                      {isEditing ? <input type="text" value={editShipData.name} onChange={e=>setEditShipData({...editShipData, name: e.target.value})} className="border border-blue-400 rounded p-1 w-full"/> : s.name}
+                    </td>
+                    <td className="p-3">
+                      {isEditing ? <input type="text" value={editShipData.flag} onChange={e=>setEditShipData({...editShipData, flag: e.target.value})} className="border border-blue-400 rounded p-1 w-full"/> : s.flag}
+                    </td>
+                    <td className="p-3 text-center">
+                      {isEditing ? <input type="number" value={editShipData.minSafeManning} onChange={e=>setEditShipData({...editShipData, minSafeManning: Number(e.target.value)})} className="border border-blue-400 rounded p-1 w-16 text-center"/> : s.minSafeManning}
+                    </td>
+                    <td className="p-3 text-center">
+                      {isEditing ? <input type="number" value={editShipData.cabinCapacity} onChange={e=>setEditShipData({...editShipData, cabinCapacity: Number(e.target.value)})} className="border border-blue-400 rounded p-1 w-16 text-center"/> : s.cabinCapacity}
+                    </td>
+                    <td className="p-3 text-center">
+                      {isEditing ? <input type="number" value={editShipData.lsaCapacity} onChange={e=>setEditShipData({...editShipData, lsaCapacity: Number(e.target.value)})} className="border border-blue-400 rounded p-1 w-16 text-center"/> : s.lsaCapacity}
+                    </td>
+                    <td className="p-3 text-center">
+                      {isEditing ? (
+                        <select value={editShipData.color} onChange={e=>setEditShipData({...editShipData, color: e.target.value})} className="border border-blue-400 rounded p-1">
+                          <option value="blue">Blue</option><option value="emerald">Emerald</option><option value="purple">Purple</option><option value="rose">Rose</option><option value="amber">Amber</option><option value="slate">Slate</option>
+                        </select>
+                      ) : (
+                        <div className={`w-4 h-4 rounded-full bg-${s.color}-500 mx-auto`}></div>
+                      )}
+                    </td>
+                    <td className="p-3 text-right">
+                      {isEditing ? (
+                        <div className="flex justify-end gap-2 items-center">
+                          <button onClick={() => { setShips(ships.map(ship => ship.id === editingShipId ? editShipData : ship)); setEditingShipId(null); }} className="text-white bg-green-500 hover:bg-green-600 px-2 py-1 rounded font-bold text-xs shadow-sm">Save</button>
+                          <button onClick={()=>setEditingShipId(null)} className="text-slate-400 hover:text-slate-600 text-xs font-medium">Cancel</button>
+                        </div>
+                      ) : (
+                        <div className="flex justify-end gap-2">
+                           <button onClick={() => { setEditingShipId(s.id); setEditShipData(s); }} className="text-slate-400 hover:text-blue-500 p-1"><Edit2 size={16}/></button>
+                           <button onClick={()=>setShips(ships.filter(ship => ship.id !== s.id))} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              <tr className="bg-teal-50/50">
+                <td className="p-3"><input type="text" placeholder="Ship Name" value={newShip.name} onChange={e=>setNewShip({...newShip, name: e.target.value})} className="w-full border border-teal-200 rounded p-1.5 text-sm outline-none"/></td>
+                <td className="p-3"><input type="text" placeholder="Flag" value={newShip.flag} onChange={e=>setNewShip({...newShip, flag: e.target.value})} className="w-full border border-teal-200 rounded p-1.5 text-sm outline-none"/></td>
+                <td className="p-3"><input type="number" value={newShip.minSafeManning} onChange={e=>setNewShip({...newShip, minSafeManning: Number(e.target.value)})} className="w-full border border-teal-200 rounded p-1.5 text-sm outline-none text-center"/></td>
+                <td className="p-3"><input type="number" value={newShip.cabinCapacity} onChange={e=>setNewShip({...newShip, cabinCapacity: Number(e.target.value)})} className="w-full border border-teal-200 rounded p-1.5 text-sm outline-none text-center"/></td>
+                <td className="p-3"><input type="number" value={newShip.lsaCapacity} onChange={e=>setNewShip({...newShip, lsaCapacity: Number(e.target.value)})} className="w-full border border-teal-200 rounded p-1.5 text-sm outline-none text-center"/></td>
+                <td className="p-3">
+                  <select value={newShip.color} onChange={e=>setNewShip({...newShip, color: e.target.value})} className="w-full border border-teal-200 rounded p-1.5 text-sm outline-none bg-white">
+                    <option value="blue">Blue</option><option value="emerald">Emerald</option><option value="purple">Purple</option><option value="rose">Rose</option><option value="amber">Amber</option><option value="slate">Slate</option>
+                  </select>
+                </td>
+                <td className="p-3 text-right"><button onClick={addShip} disabled={!newShip.name} className="bg-teal-600 text-white px-3 py-1.5 rounded text-sm font-bold disabled:opacity-50">Add Ship</button></td>
               </tr>
             </tbody>
           </table>
@@ -1516,8 +1632,9 @@ function NotesModal({ isOpen, name, notes, currentUser, onClose, onAdd, onDelete
           }
         </div>
         
-        <div className="p-4 border-t border-slate-200 bg-white rounded-b-xl flex gap-2 shrink-0">
-          <input 
+        {currentUser.role !== 'viewer' && (
+          <div className="p-4 border-t border-slate-200 bg-white rounded-b-xl flex gap-2 shrink-0">
+            <input 
               type="text" placeholder="Type a note..." 
               className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
               value={text} onChange={e=>setText(e.target.value)}
@@ -1525,6 +1642,7 @@ function NotesModal({ isOpen, name, notes, currentUser, onClose, onAdd, onDelete
             />
             <button disabled={!text} onClick={() => { onAdd(text); setText(''); }} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors">Add</button>
           </div>
+        )}
       </div>
     </div>
   );
@@ -1677,10 +1795,10 @@ function Login({ users, onLogin }) {
     <div className="flex h-screen bg-[#0f172a] items-center justify-center font-sans text-slate-800 p-4">
       <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-100">
         <div className="flex flex-col items-center mb-8">
-          <div className="bg-blue-600 p-3.5 rounded-2xl mb-4 shadow-lg shadow-blue-600/30">
-            <Ship className="text-white" size={36} strokeWidth={2.5} />
+          <div className="bg-[#0f172a] p-3.5 rounded-2xl mb-4 shadow-lg shadow-slate-900/30">
+             <ArmonaLogo className="w-10 h-10" />
           </div>
-          <h1 className="text-2xl font-black text-slate-800 tracking-wide text-center">CREW MASTER PRO</h1>
+          <h1 className="text-2xl font-black text-slate-800 tracking-wide text-center">ARMONA CREW MANAGER</h1>
           <p className="text-slate-500 text-sm mt-1.5 font-medium">Please sign in to your account</p>
         </div>
 
@@ -1701,7 +1819,7 @@ function Login({ users, onLogin }) {
         </form>
         
         <div className="mt-8 text-center text-xs text-slate-400 font-medium">
-          Crew Management System <br/> v1.0
+          Custom Crewing Software <br/> designed by Batuhan Tas
         </div>
       </div>
     </div>
