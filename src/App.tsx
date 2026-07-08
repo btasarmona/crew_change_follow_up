@@ -68,18 +68,14 @@ const initialProcSchema = [
   { id: 'ps3', name: 'Handover Doc', type: 'checkbox', appliesTo: 'offsigner' },
 ];
 
-const initialProcedures = [
-  { id: 'p1', crewId: 'c100', crewName: 'Old Master', rank: 'Master', dept: 'Deck', shipName: 'MT Alpha', type: 'offsigner', date: '2026-07-01', status: 'active', evaluationDone: false, debriefDone: false, dynamicData: {}, notes: [], evalSnapshot: [{name: 'Mike Johnson', rank: 'AB', score:''}, {name: 'Steve Adams', rank: 'AB', score:''}] }
-];
+const initialProcedures = [];
 
 const initialEvals = [
   { id: 'e1', crewName: 'Mike Johnson', rank: 'AB', shipName: 'MT Alpha', date: '2026-01-01', score: 85, evaluatedBy: 'John Doe' },
   { id: 'e2', crewName: 'Jane Smith', rank: 'Chief Engineer', shipName: 'MT Alpha', date: '2026-02-15', score: 65, evaluatedBy: 'Office' }
 ];
 
-const initialDebriefings = [
-  { id: 'd1', crewName: 'Sarah Connor', shipName: 'MV Beta', rank: 'Chief Officer', signOffDate: '2026-05-10', startDate: '2026-05-12', endDate: '2026-05-13', status: 'archived', depts: [{name:'Deck', note:'Good performance overall.', score:'88'},{name:'Engine', note:'', score:'90'},{name:'Safety', note:'Needs to improve drills.', score:'65'},{name:'HR', note:'All documents clear.', score:'95'}] }
-];
+const initialDebriefings = [];
 
 // --- MAIN APP COMPONENT ---
 
