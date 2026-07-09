@@ -9,12 +9,10 @@ import {
 
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDocs } from 'firebase/firestore';
 
 // --- FIREBASE CONFIGURATION ---
-// Kendi Firebase Config bilgilerinizi buraya yapıştırın.
-// Canvas ortamında otomatik çalışması için bir fallback mekanizması eklendi.
 const customFirebaseConfig = {
   apiKey: "AIzaSyDob7zaTPNIDBgoMH9WBiEBSBp91atzJDA",
   authDomain: "armona-crew-manager.firebaseapp.com",
@@ -24,8 +22,17 @@ const customFirebaseConfig = {
   appId: "1:916422821733:web:ffeef86ed539928cca838c"
 };
 
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : customFirebaseConfig;
-const app = initializeApp(firebaseConfig);
+// Güvenli başlatma (Çift 'const' çakışmasını ve derleme hatalarını önler)
+let firebaseConfigObj = customFirebaseConfig;
+try {
+  if (typeof __firebase_config !== 'undefined') {
+    firebaseConfigObj = JSON.parse(__firebase_config);
+  }
+} catch (err) {
+  console.warn("Using local firebase config.");
+}
+
+const app = initializeApp(firebaseConfigObj);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
@@ -162,10 +169,14 @@ export default function App() {
       await setDoc(doc(db, getPath('settings'), 'rank_matrix'), { items: SEED_DATA.matrix });
       await setDoc(doc(db, getPath('settings'), 'proc_schema'), { items: SEED_DATA.schema });
       for (let s of SEED_DATA.ships) await setDoc(doc(db, getPath('ships'), s.id), s);
+      
+      setIsDbLoading(false);
+      return { success: true };
     } catch(err) {
       console.error("Database seed error:", err);
+      setIsDbLoading(false);
+      return { success: false, error: err.message };
     }
-    setIsDbLoading(false);
   };
 
   const handleLogin = (user) => {
@@ -1879,7 +1890,14 @@ function Login({ users, onLogin, isDbEmpty, onSeed }) {
 
   const handleInitialize = async () => {
     setSeeding(true);
-    await onSeed();
+    try {
+      const result = await onSeed();
+      if (result && !result.success) {
+        setError(`Database Initialization Failed: ${result.error}. Please check your Firebase Firestore Security Rules and enable Anonymous Authentication.`);
+      }
+    } catch (err) {
+      setError(`Unexpected Error: ${err.message}`);
+    }
     setSeeding(false);
   };
 
@@ -1901,6 +1919,9 @@ function Login({ users, onLogin, isDbEmpty, onSeed }) {
                  <strong>Database is empty!</strong><br/>
                  Click the button below to initialize the default Admin account and configuration.
               </div>
+              
+              {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-xs font-medium border border-red-200 text-left">{error}</div>}
+
               <button onClick={handleInitialize} disabled={seeding} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition-colors shadow-sm disabled:opacity-50">
                  {seeding ? 'Initializing Database...' : 'Initialize First Run Data'}
               </button>
