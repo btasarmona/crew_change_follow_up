@@ -10,9 +10,11 @@ import {
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDocs } from 'firebase/firestore';
 
-
+// --- FIREBASE CONFIGURATION ---
+// Kendi Firebase Config bilgilerinizi buraya yapıştırın.
+// Canvas ortamında otomatik çalışması için bir fallback mekanizması eklendi.
 const customFirebaseConfig = {
   apiKey: "AIzaSyBodyi-nGpL7TExhyxJQkL5boZxVzB-NKs",
   authDomain: "crew-change-follow-up.firebaseapp.com",
@@ -145,10 +147,24 @@ export default function App() {
   
   const handleSeedDatabase = async () => {
     setIsDbLoading(true);
-    await setDoc(doc(db, getPath('appUsers'), 'u1'), { username: 'Admin', password: 'Bt.admin.86!', role: 'admin' });
-    await setDoc(doc(db, getPath('settings'), 'rank_matrix'), { items: SEED_DATA.matrix });
-    await setDoc(doc(db, getPath('settings'), 'proc_schema'), { items: SEED_DATA.schema });
-    for (let s of SEED_DATA.ships) await setDoc(doc(db, getPath('ships'), s.id), s);
+    try {
+      // 1. ESKİ VERİLERİ TEMİZLE (Factory Reset)
+      const collectionsToClear = ['ships', 'crew', 'procedures', 'evaluations', 'debriefings', 'appUsers'];
+      for (const colName of collectionsToClear) {
+        const querySnapshot = await getDocs(collection(db, getPath(colName)));
+        for (const document of querySnapshot.docs) {
+          await deleteDoc(doc(db, getPath(colName), document.id));
+        }
+      }
+
+      // 2. YENİ BAŞLANGIÇ VERİLERİNİ YAZ
+      await setDoc(doc(db, getPath('appUsers'), 'u1'), { username: 'Admin', password: 'Bt.admin.86!', role: 'admin' });
+      await setDoc(doc(db, getPath('settings'), 'rank_matrix'), { items: SEED_DATA.matrix });
+      await setDoc(doc(db, getPath('settings'), 'proc_schema'), { items: SEED_DATA.schema });
+      for (let s of SEED_DATA.ships) await setDoc(doc(db, getPath('ships'), s.id), s);
+    } catch(err) {
+      console.error("Database seed error:", err);
+    }
     setIsDbLoading(false);
   };
 
@@ -607,7 +623,7 @@ function Dashboard({ ships, crew, matrix, currentUser, today, onOpenLineup, onOp
             </div>
 
             <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50/50">
-              {pool.filter(c => c.name.toLowerCase().includes(poolSearch.toLowerCase()) || c.competency.toLowerCase().includes(poolSearch.toLowerCase())).map(c => (
+              {pool.filter(c => (c.name || '').toLowerCase().includes(poolSearch.toLowerCase()) || (c.competency || '').toLowerCase().includes(poolSearch.toLowerCase())).map(c => (
                 <div key={c.id} className="border border-slate-200 rounded-lg p-2.5 hover:border-blue-300 hover:shadow-sm transition-all bg-white relative overflow-hidden group">
                   <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500"></div>
                   <div className="flex justify-between items-start pl-2">
@@ -982,8 +998,8 @@ function Procedures({ procedures, schema, currentUser, onUpdateProc, onUpdateDyn
   const displayData = procedures.filter(p => {
     if (p.status !== tab) return false;
     if (typeFilter && p.type !== typeFilter) return false;
-    if (crewSearch && !p.crewName.toLowerCase().includes(crewSearch.toLowerCase())) return false;
-    if (vesselSearch && !p.shipName.toLowerCase().includes(vesselSearch.toLowerCase())) return false;
+    if (crewSearch && !(p.crewName || '').toLowerCase().includes(crewSearch.toLowerCase())) return false;
+    if (vesselSearch && !(p.shipName || '').toLowerCase().includes(vesselSearch.toLowerCase())) return false;
     if (dateFrom && new Date(p.date).getTime() < new Date(dateFrom).getTime()) return false;
     if (dateTo && new Date(p.date).getTime() > new Date(dateTo).getTime()) return false;
     return true;
@@ -1139,10 +1155,10 @@ function EvaluationsOverview({ evals, ships, matrix, currentUser, onDelete }) {
 
   const displayEvals = evals.filter(e => {
     if(fRank && e.rank !== fRank) return false;
-    if(fName && !e.crewName.toLowerCase().includes(fName.toLowerCase())) return false;
+    if(fName && !(e.crewName || '').toLowerCase().includes(fName.toLowerCase())) return false;
     if(fVessel && e.shipName !== fVessel) return false;
     if(fDate && e.date !== fDate) return false;
-    if(fEvalBy && !e.evaluatedBy.toLowerCase().includes(fEvalBy.toLowerCase())) return false;
+    if(fEvalBy && !(e.evaluatedBy || '').toLowerCase().includes(fEvalBy.toLowerCase())) return false;
     return true;
   });
 
@@ -1316,9 +1332,9 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelet
 
   const displayData = debriefings.filter(d => {
     if (d.status !== tab) return false;
-    if (fRank && !d.rank.toLowerCase().includes(fRank.toLowerCase())) return false;
-    if (fName && !d.crewName.toLowerCase().includes(fName.toLowerCase())) return false;
-    if (fVessel && !d.shipName.toLowerCase().includes(fVessel.toLowerCase())) return false;
+    if (fRank && !(d.rank || '').toLowerCase().includes(fRank.toLowerCase())) return false;
+    if (fName && !(d.crewName || '').toLowerCase().includes(fName.toLowerCase())) return false;
+    if (fVessel && !(d.shipName || '').toLowerCase().includes(fVessel.toLowerCase())) return false;
     if (dateFrom && new Date(d.signOffDate).getTime() < new Date(dateFrom).getTime()) return false;
     if (dateTo && new Date(d.signOffDate).getTime() > new Date(dateTo).getTime()) return false;
     return true;
