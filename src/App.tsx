@@ -43,7 +43,7 @@ const getPath = (col) => typeof __app_id !== 'undefined' ? `artifacts/${appId}/p
 // --- CUSTOM LOGO COMPONENT ---
 const ArmonaLogo = ({ className = "w-8 h-8" }) => (
   <img 
-    src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAACXBIWXMAAAsTAAALEwEAmpwYAAADw0lEQVR4nO2cS0hUYRTHf/dxHDFL0yQxsyxKSwrMIsIgSChxI1wEhUFthG4i1CJo46p9W0TQRqgWLVpEUEFBFBVBhUVRVBSV0wVpk81oU5w5T+fEKIy+p+N9P+45P3jB6B3O/X7cc9/vA2IURVEURVEURVEURVEURVEURVEURVFUnZgS6wR05RzQAzQDbcAAYAG6gXagFVgArASeAKPAM+AFkIu1x6kgyR4g2+kEXgPPAX/2uH2K2SgqZAA4AkyS8r0K3AbWg1j2uH16l14D2oExUpqHwHagwB7Xn6xCXgFXSWm8AboVR38G6CWlaQb67HG1SioEcB0Y10jzEdhpi7NNUiGAO8C1Rpo7wHZbvG1ZIsxHwF1SjG5giC2+tkwxA8BpUgx3gD22+NqyRMwHwHVSiBfAA2CRLc62SIVYBpwH+kj+fgq8Alba4myLVIIsBS4AnSRvXgC/gD22eNsi1SAZQAMww8XGgIu2uNoi1SJ9wH2gF2vjO3ABuGOLrS2rRBZ4BDSQPHkPnAOe2uJqy2qRbUATyZNVwBdgiy2udtkihQCOkVx8P1gCrrbF1S4rhQyQfP+zT8A9IF/tX21SIT1AJ/AQK82r2tP5R8hQ8+FmX+1fbVIhc61hU17tX22yUciVzS9kH/AIK+0x1P7VJhXSD8y10pyv9q82yR/Xl1hpHlT7V5tUCGA1Vpon1P7VJhWyHHiHleY9sNn3L7ZIhVQA54FXWGmeAQfl1n4UuK32sXapECgAaoHzwC3mK+Yq0AuMAv1AJzAOtAKdWKkuA/uB1cBeYBewF9gPVAH7gBrZtwIoy2gWJ1oh4Kj/mY/AAyAvU6zFQDlQAxR5OIsNfAHwM6NZnMgtB1yXk942YAaL2C6z4/8rRz8R/1E/y2geJ+x1iB/XgQ9y0psLFMroN1t+94r87s5oHiesU4gA7iM10X1ArYxm0wA0y+92Gs3jhLUKEcDlpCa6Exj3sZ0sB7rkdxeM5nHCSoU0k5roe6DQx3YqA2rkd7ON5nHCSoUI4CFSE+2x4T1Z2Y+E0TxOWKeQAaBCfn8YyM9oNpU+z2A0jxPWKUTAdfndw0CujH5r5XezHn41h6VClsiJXkH68kH1Z42V0TxOWKmQd2y64y/sP3c2fW2m2A6g1P/MaTz/mJqV1yECeIiVxk1g3Md2svq032geJ6xUiF//c7rZ9B2p/X8K/EfyP0eG8mZgD2Gcwj/jNfAL2AmsBQqAIuX7L/AJeAC8At4Cr4EZYAKYBB4Do8AQ8BwYBW4CzwFX/n8UoigS/AdGTV571mIeQwAAAABJRU5ErkJggg==" 
+    src="https://www.atlantis-tankers.com/assets/images/logo.png" 
     alt="Armona Crew Manager Logo" 
     className={`${className} object-contain`}
   />
@@ -74,6 +74,15 @@ const SEED_DATA = {
     { id: 'ps1', name: 'Endorse Check', type: 'checkbox', appliesTo: 'onsigner' },
     { id: 'ps2', name: 'Med. Fitness', type: 'date', appliesTo: 'onsigner' },
     { id: 'ps3', name: 'Handover Doc', type: 'checkbox', appliesTo: 'offsigner' },
+  ],
+  procedures: [
+    { id: 'p1', crewId: 'c100', crewName: 'Test Master', rank: 'Master', dept: 'Deck', shipName: 'MT Alpha', type: 'offsigner', date: today.toISOString().split('T')[0], status: 'active', evaluationDone: false, debriefDone: false, dynamicData: {}, notes: [], evalSnapshot: [{name: 'Test AB', rank: 'AB', score:''}] }
+  ],
+  evaluations: [
+    { id: 'e1', crewName: 'Test AB', rank: 'AB', shipName: 'MT Alpha', date: today.toISOString().split('T')[0], score: 85, evaluatedBy: 'Test Master' }
+  ],
+  debriefings: [
+    { id: 'd1', crewName: 'Test Chief', shipName: 'MV Beta', rank: 'Chief Officer', signOffDate: today.toISOString().split('T')[0], startDate: today.toISOString().split('T')[0], endDate: today.toISOString().split('T')[0], status: 'active', depts: [{name:'Deck', note:'Good performance.', score:'88'},{name:'Engine', note:'', score:''},{name:'Safety', note:'', score:''},{name:'HR', note:'', score:''}] }
   ]
 };
 
@@ -169,6 +178,9 @@ export default function App() {
       await setDoc(doc(db, getPath('settings'), 'rank_matrix'), { items: SEED_DATA.matrix });
       await setDoc(doc(db, getPath('settings'), 'proc_schema'), { items: SEED_DATA.schema });
       for (let s of SEED_DATA.ships) await setDoc(doc(db, getPath('ships'), s.id), s);
+      for (let p of SEED_DATA.procedures) await setDoc(doc(db, getPath('procedures'), p.id), p);
+      for (let e of SEED_DATA.evaluations) await setDoc(doc(db, getPath('evaluations'), e.id), e);
+      for (let d of SEED_DATA.debriefings) await setDoc(doc(db, getPath('debriefings'), d.id), d);
       
       setIsDbLoading(false);
       return { success: true };
@@ -209,6 +221,7 @@ export default function App() {
   };
 
   const handleAssign = async (shipId, rank, startDate, endDate, handleOverlap, addToProc, assignCrewMember) => {
+    if (!assignCrewMember) return;
     if (handleOverlap === 'relieve') {
       const existing = crew.find(c => c.shipId === shipId && c.rank === rank && c.status === 'onboard');
       if (existing) { 
@@ -236,6 +249,7 @@ export default function App() {
   };
 
   const handleSignOff = async (date, addToProc, crewMember) => {
+    if (!crewMember) return;
     await updateDoc(doc(db, getPath('crew'), crewMember.id), { status: 'onleave', shipId: null, contractStart: '', contractEnd: '' });
     
     let snapshotData = null;
@@ -244,11 +258,11 @@ export default function App() {
     
     if (['Master', 'Chief Engineer'].includes(crewMember.rank)) {
       snapshotData = crew.filter(c => 
-        c.shipId === crewMember.shipId && c.id !== crewMember.id && new Date(c.contractStart).getTime() <= today.getTime() && matrix.find(m => m.rank === c.rank)?.dept === dept
+        c.shipId === crewMember.shipId && c.id !== crewMember.id && c.contractStart && new Date(c.contractStart).getTime() <= today.getTime() && matrix.find(m => m.rank === c.rank)?.dept === dept
       ).map(c => ({ name: c.name, rank: c.rank, score: '' }));
     } else {
       const managerRank = dept === 'Engine' ? 'Chief Engineer' : 'Master';
-      const manager = crew.find(c => c.shipId === crewMember.shipId && c.rank === managerRank && new Date(c.contractStart).getTime() <= today.getTime());
+      const manager = crew.find(c => c.shipId === crewMember.shipId && c.rank === managerRank && c.contractStart && new Date(c.contractStart).getTime() <= today.getTime());
       snapshotData = manager ? manager.name : 'Office (No Manager found)';
     }
 
@@ -450,7 +464,9 @@ export default function App() {
            crewMember={editContractModal.crew}
            onClose={() => setEditContractModal({ isOpen: false, crew: null })}
            onConfirm={async (start, end) => {
-             await updateDoc(doc(db, getPath('crew'), editContractModal.crew.id), { contractStart: start, contractEnd: end });
+             if(editContractModal.crew?.id) {
+               await updateDoc(doc(db, getPath('crew'), editContractModal.crew.id), { contractStart: start, contractEnd: end });
+             }
              setEditContractModal({ isOpen: false, crew: null });
            }}
         />
@@ -461,7 +477,9 @@ export default function App() {
           message={deleteWarnModal.message} showConfirm={!!deleteWarnModal.crewId}
           onClose={() => setDeleteWarnModal({ isOpen: false, message: '', crewId: null })}
           onConfirm={async () => {
-            await deleteDoc(doc(db, getPath('crew'), deleteWarnModal.crewId));
+            if(deleteWarnModal.crewId) {
+              await deleteDoc(doc(db, getPath('crew'), deleteWarnModal.crewId));
+            }
             setDeleteWarnModal({ isOpen: false, message: '', crewId: null });
           }}
         />
@@ -679,10 +697,14 @@ function Dashboard({ ships, crew, matrix, currentUser, today, onOpenLineup, onOp
 function LineupModal({ ship, crew, matrix, currentUser, today, getDaysBetween, onClose, onSignOff, onNotes, onEditContract }) {
   const groupedCrew = useMemo(() => {
     const groups = [];
-    matrix.forEach(m => {
+    (matrix || []).forEach(m => {
       const members = crew.filter(c => c.rank === m.rank);
       if (members.length > 0) {
-        members.sort((a,b) => new Date(a.contractStart).getTime() - new Date(b.contractStart).getTime());
+        members.sort((a,b) => {
+          const tA = a.contractStart ? new Date(a.contractStart).getTime() : 0;
+          const tB = b.contractStart ? new Date(b.contractStart).getTime() : 0;
+          return tA - tB;
+        });
         groups.push({ matrix: m, members });
       }
     });
@@ -769,12 +791,12 @@ function LineupModal({ ship, crew, matrix, currentUser, today, getDaysBetween, o
               {groupedCrew.map((group, gIdx) => (
                 <div key={gIdx} className="border border-slate-300 rounded overflow-hidden shadow-sm bg-white">
                   {group.members.map((c, mIdx) => {
-                    const isExpired = new Date(c.contractEnd).getTime() < today.getTime();
-                    const isPlanned = new Date(c.contractStart).getTime() > today.getTime();
+                    const isExpired = c.contractEnd && new Date(c.contractEnd).getTime() < today.getTime();
+                    const isPlanned = c.contractStart && new Date(c.contractStart).getTime() > today.getTime();
                     const showInnerBorder = mIdx !== group.members.length - 1 && !group.matrix.checkOverlap;
                     const rowClass = showInnerBorder ? 'border-b border-slate-200' : '';
 
-                    let endPct = ((new Date(c.contractEnd).getTime() - timelineStart.getTime()) / (1000*60*60*24)) / totalDays * 100;
+                    let endPct = c.contractEnd ? ((new Date(c.contractEnd).getTime() - timelineStart.getTime()) / (1000*60*60*24)) / totalDays * 100 : 0;
                     if (endPct > 100) endPct = 100;
                     if (endPct < 0) endPct = 0;
 
@@ -811,7 +833,7 @@ function LineupModal({ ship, crew, matrix, currentUser, today, getDaysBetween, o
                           )}
 
                           {isExpired && (
-                             <div className="absolute z-10 text-[9px] font-bold text-red-500 flex items-center gap-0.5 whitespace-nowrap" style={{left: `${((new Date(c.contractEnd).getTime() - timelineStart.getTime())/(1000*60*60*24))/totalDays*100 + 3}%`, top: '4px'}}>
+                             <div className="absolute z-10 text-[9px] font-bold text-red-500 flex items-center gap-0.5 whitespace-nowrap" style={{left: `${endPct + 3}%`, top: '4px'}}>
                                <AlertTriangle size={10}/> Expired
                              </div>
                           )}
@@ -930,7 +952,7 @@ function SignOffModal({ crewMember, today, onClose, onConfirm }) {
 
   if (!crewMember) return null;
   
-  const isEarly = new Date(date).getTime() < new Date(crewMember.contractEnd).getTime();
+  const isEarly = crewMember.contractEnd && new Date(date).getTime() < new Date(crewMember.contractEnd).getTime();
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
@@ -1806,7 +1828,7 @@ function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, users, onA
                     <input type="checkbox" checked={m.checkOverlap} onChange={e => { const nm=[...matrix]; nm[i].checkOverlap=e.target.checked; setMatrix(nm); }} className="rounded border-slate-300 w-4 h-4 cursor-pointer" />
                   </td>
                   <td className="p-3 flex gap-1.5 flex-wrap items-center">
-                    {m.competencies.map((c, j) => (
+                    {(m.competencies || []).map((c, j) => (
                       <span key={j} className="bg-slate-200 text-slate-700 text-[11px] font-bold px-2 py-1 rounded border border-slate-300 flex items-center gap-1">
                         {c} <button onClick={()=>removeCompetency(i,j)} className="hover:text-red-500"><X size={10}/></button>
                       </span>
@@ -1867,6 +1889,125 @@ function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, users, onA
            </select>
            <button onClick={addColumn} disabled={!newCol.name} className="bg-green-600 text-white px-4 py-1.5 rounded font-bold text-sm disabled:opacity-50">Add Column</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function CrewFormModal({ matrix, crewMember, onClose, onConfirm }) {
+  const isEdit = !!crewMember;
+  const [name, setName] = useState(crewMember?.name || '');
+  const [competency, setCompetency] = useState(crewMember?.competency || '');
+  const [readiness, setReadiness] = useState(crewMember?.readinessDate || '');
+
+  const allComps = useMemo(() => {
+    const set = new Set();
+    (matrix || []).forEach(m => (m.competencies || []).forEach(c => set.add(c)));
+    return Array.from(set);
+  }, [matrix]);
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+        <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+            {isEdit ? <Edit2 size={20} className="text-blue-500"/> : <UserPlus size={20} className="text-blue-500"/>}
+            {isEdit ? 'Edit Crew Details' : 'Add New Crew'}
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 bg-white p-1 rounded shadow-sm border border-slate-200"><X size={18}/></button>
+        </div>
+        
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
+            <input type="text" className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Ahmet Yılmaz"/>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Competency (License)</label>
+            <select className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-white" value={competency} onChange={e=>setCompetency(e.target.value)}>
+              <option value="">-- Select Competency --</option>
+              {allComps.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Readiness Date (Optional)</label>
+            <input type="date" className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" value={readiness} onChange={e=>setReadiness(e.target.value)}/>
+          </div>
+        </div>
+        
+        <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors">Cancel</button>
+          <button 
+            disabled={!name || !competency}
+            onClick={() => onConfirm({ name, competency, readinessDate: readiness })} 
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+          >
+            {isEdit ? 'Save Changes' : 'Add to Pool'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteConfirmModal({ message, showConfirm, onClose, onConfirm }) {
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[70] p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden p-6 text-center">
+        <AlertTriangle size={48} className="mx-auto text-red-500 mb-4" />
+        <h3 className="text-lg font-bold text-slate-800 mb-2">{showConfirm ? 'Confirm Deletion' : 'Cannot Delete'}</h3>
+        <p className="text-sm text-slate-600 mb-6">{message}</p>
+        <div className="flex justify-center gap-3">
+           <button onClick={onClose} className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg font-bold text-sm">Close</button>
+           {showConfirm && (
+             <button onClick={onConfirm} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-sm">Yes, Delete</button>
+           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NotesModal({ isOpen, name, notes, currentUser, onClose, onAdd, onDelete }) {
+  const [text, setText] = useState('');
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-[70] p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md flex flex-col h-[500px]">
+        <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-xl shrink-0">
+          <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 truncate pr-2"><MessageCircle size={20} className="text-blue-500 shrink-0"/> Notes: {name}</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 shrink-0"><X size={20} /></button>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-100/50">
+          {notes?.length === 0 ? <p className="text-center text-slate-400 text-sm mt-10">No notes yet.</p> : 
+            notes.map((n, i) => (
+              <div key={n.id || i} className="bg-white p-3 rounded-lg shadow-sm border border-slate-100 group relative">
+                <p className="text-slate-700 text-sm whitespace-pre-wrap">{n.text}</p>
+                <div className="flex justify-between items-center mt-2 text-[10px] text-slate-400 font-medium border-t border-slate-50 pt-2">
+                  <span>{n.author}</span>
+                  <span>{new Date(n.date).toLocaleString()}</span>
+                </div>
+                {currentUser.role === 'admin' && (
+                  <button onClick={()=>onDelete(n.id)} className="absolute top-2 right-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity bg-white"><Trash2 size={14}/></button>
+                )}
+              </div>
+            ))
+          }
+        </div>
+        
+        {currentUser.role !== 'viewer' && (
+          <div className="p-4 border-t border-slate-200 bg-white rounded-b-xl flex gap-2 shrink-0">
+            <input 
+              type="text" placeholder="Type a note..." 
+              className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              value={text} onChange={e=>setText(e.target.value)}
+              onKeyDown={e => { if(e.key==='Enter' && text) { onAdd(text); setText(''); } }}
+            />
+            <button disabled={!text} onClick={() => { onAdd(text); setText(''); }} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors">Add</button>
+          </div>
+        )}
       </div>
     </div>
   );
