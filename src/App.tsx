@@ -7,6 +7,32 @@ import {
   Archive, Edit2, LogOut, UserPlus, Trash2, Filter, Info, RotateCcw
 } from 'lucide-react';
 
+// --- FIREBASE IMPORTS ---
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+
+// --- FIREBASE CONFIGURATION ---
+// Kendi Firebase Config bilgilerinizi buraya yapıştırın.
+// Canvas ortamında otomatik çalışması için bir fallback mekanizması eklendi.
+const customFirebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : customFirebaseConfig;
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// Firestore Collections Path (Canvas uyumluluğu için)
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'armona-crew-manager';
+const getPath = (col) => typeof __app_id !== 'undefined' ? `artifacts/${appId}/public/data/${col}` : col;
+
 // --- CUSTOM LOGO COMPONENT ---
 const ArmonaLogo = ({ className = "w-8 h-8" }) => (
   <img 
@@ -16,82 +42,57 @@ const ArmonaLogo = ({ className = "w-8 h-8" }) => (
   />
 );
 
-
-const firebaseConfig = {
-  apiKey: "AIzaSyBodyi-nGpL7TExhyxJQkL5boZxVzB-NKs",
-  authDomain: "crew-change-follow-up.firebaseapp.com",
-  projectId: "crew-change-follow-up",
-  storageBucket: "crew-change-follow-up.firebasestorage.app",
-  messagingSenderId: "224379023927",
-  appId: "1:224379023927:web:4e6b7cd7dc87519b0685b2"
-};
-
-
 const generateId = () => Math.random().toString(36).substr(2, 9);
+const today = new Date(); // Gerçek zamanlı güncellenir
 
-const initialMatrix = [
-  { id: 'm1', rank: 'Master', dept: 'Deck', checkOverlap: true, competencies: ['Master Mariner', 'Chief Mate'] },
-  { id: 'm2', rank: 'Chief Officer', dept: 'Deck', checkOverlap: true, competencies: ['Master Mariner', 'Chief Mate', 'OOW (Deck)'] },
-  { id: 'm3', rank: 'Second Officer', dept: 'Deck', checkOverlap: true, competencies: ['OOW (Deck)'] },
-  { id: 'm4', rank: 'Chief Engineer', dept: 'Engine', checkOverlap: true, competencies: ['Chief Engineer Unlimited'] },
-  { id: 'm5', rank: 'Second Engineer', dept: 'Engine', checkOverlap: true, competencies: ['Chief Engineer Unlimited', 'Second Engineer Unlimited'] },
-  { id: 'm6', rank: 'Bosun', dept: 'Deck', checkOverlap: false, competencies: ['Able Seafarer Deck'] },
-  { id: 'm7', rank: 'AB', dept: 'Deck', checkOverlap: false, competencies: ['Able Seafarer Deck', 'Navigational Watch'] },
-  { id: 'm8', rank: 'Oiler', dept: 'Engine', checkOverlap: false, competencies: ['Able Seafarer Engine'] },
-  { id: 'm9', rank: 'Cook', dept: 'Other', checkOverlap: true, competencies: ['Ship Cook Certificate'] },
-  { id: 'm10', rank: 'Wiper', dept: 'Engine', checkOverlap: false, competencies: ['Engine Watch Rating'] }
-];
-
-const initialShips = [
-  { id: 's1', name: 'MT Alpha', flag: 'Panama', minSafeManning: 12, cabinCapacity: 15, lsaCapacity: 18, color: 'blue', notes: [] },
-  { id: 's2', name: 'MV Beta', flag: 'Liberia', minSafeManning: 14, cabinCapacity: 16, lsaCapacity: 20, color: 'emerald', notes: [{ id: 'n1', author: 'Admin', text: 'Drydock next month', date: '2026-06-15T10:00:00Z' }] },
-  { id: 's3', name: 'MV Gamma', flag: 'Malta', minSafeManning: 10, cabinCapacity: 14, lsaCapacity: 16, color: 'purple', notes: [] },
-  { id: 's4', name: 'MT Delta', flag: 'Marshall Isl.', minSafeManning: 15, cabinCapacity: 18, lsaCapacity: 22, color: 'rose', notes: [] }
-];
-
-const today = new Date('2026-07-08');
-
-const initialCrew = [
-  { id: 'c1', name: 'John Doe', competency: 'Master Mariner', status: 'onboard', shipId: 's1', rank: 'Master', contractStart: '2026-03-01', contractEnd: '2026-07-15', readinessDate: '', isProbation: false, notes: [] },
-  { id: 'c2', name: 'Jane Smith', competency: 'Chief Engineer Unlimited', status: 'onboard', shipId: 's1', rank: 'Chief Engineer', contractStart: '2026-01-10', contractEnd: '2026-06-10', readinessDate: '', isProbation: false, notes: [] },
-  { id: 'c3', name: 'Mike Johnson', competency: 'Able Seafarer Deck', status: 'onboard', shipId: 's1', rank: 'AB', contractStart: '2026-05-01', contractEnd: '2026-11-01', readinessDate: '', isProbation: true, notes: [] },
-  { id: 'c3b', name: 'Steve Adams', competency: 'Able Seafarer Deck', status: 'onboard', shipId: 's1', rank: 'AB', contractStart: '2026-05-15', contractEnd: '2026-11-15', readinessDate: '', isProbation: false, notes: [] },
-  { id: 'c4', name: 'Tom Wilson', competency: 'Master Mariner', status: 'onleave', shipId: null, rank: 'TBA', contractStart: '', contractEnd: '', readinessDate: '2026-07-10', isProbation: false, notes: [] },
-  { id: 'c5', name: 'Emily Davis', competency: 'Second Engineer Unlimited', status: 'onleave', shipId: null, rank: 'TBA', contractStart: '', contractEnd: '', readinessDate: '2026-07-20', isProbation: false, notes: [] },
-  { id: 'c6', name: 'Ali Veli', competency: 'Ship Cook Certificate', status: 'onboard', shipId: 's2', rank: 'Cook', contractStart: '2026-06-01', contractEnd: '2026-12-01', readinessDate: '', isProbation: false, notes: [] },
-  { id: 'c7', name: 'Sarah Connor', competency: 'Chief Mate', status: 'onboard', shipId: 's2', rank: 'Chief Officer', contractStart: '2026-06-15', contractEnd: '2026-10-15', readinessDate: '', isProbation: false, notes: [] },
-  { id: 'c8', name: 'Future Guy', competency: 'OOW (Deck)', status: 'onboard', shipId: 's1', rank: 'Second Officer', contractStart: '2026-07-20', contractEnd: '2026-11-20', readinessDate: '', isProbation: false, notes: [] },
-];
-
-const initialProcSchema = [
-  { id: 'ps1', name: 'Endorse Check', type: 'checkbox', appliesTo: 'onsigner' },
-  { id: 'ps2', name: 'Med. Fitness', type: 'date', appliesTo: 'onsigner' },
-  { id: 'ps3', name: 'Handover Doc', type: 'checkbox', appliesTo: 'offsigner' },
-];
-
-const initialProcedures = [];
-const initialEvals = [];
-const initialDebriefings = [];
+// --- SEED DATA FOR FIRST RUN ---
+const SEED_DATA = {
+  matrix: [
+    { id: 'm1', rank: 'Master', dept: 'Deck', checkOverlap: true, competencies: ['Master Mariner', 'Chief Mate'] },
+    { id: 'm2', rank: 'Chief Officer', dept: 'Deck', checkOverlap: true, competencies: ['Master Mariner', 'Chief Mate', 'OOW (Deck)'] },
+    { id: 'm3', rank: 'Second Officer', dept: 'Deck', checkOverlap: true, competencies: ['OOW (Deck)'] },
+    { id: 'm4', rank: 'Chief Engineer', dept: 'Engine', checkOverlap: true, competencies: ['Chief Engineer Unlimited'] },
+    { id: 'm5', rank: 'Second Engineer', dept: 'Engine', checkOverlap: true, competencies: ['Chief Engineer Unlimited', 'Second Engineer Unlimited'] },
+    { id: 'm6', rank: 'Bosun', dept: 'Deck', checkOverlap: false, competencies: ['Able Seafarer Deck'] },
+    { id: 'm7', rank: 'AB', dept: 'Deck', checkOverlap: false, competencies: ['Able Seafarer Deck', 'Navigational Watch'] },
+    { id: 'm8', rank: 'Oiler', dept: 'Engine', checkOverlap: false, competencies: ['Able Seafarer Engine'] },
+    { id: 'm9', rank: 'Cook', dept: 'Other', checkOverlap: true, competencies: ['Ship Cook Certificate'] },
+    { id: 'm10', rank: 'Wiper', dept: 'Engine', checkOverlap: false, competencies: ['Engine Watch Rating'] }
+  ],
+  ships: [
+    { id: 's1', name: 'MT Alpha', flag: 'Panama', minSafeManning: 12, cabinCapacity: 15, lsaCapacity: 18, color: 'blue', notes: [] },
+    { id: 's2', name: 'MV Beta', flag: 'Liberia', minSafeManning: 14, cabinCapacity: 16, lsaCapacity: 20, color: 'emerald', notes: [] }
+  ],
+  schema: [
+    { id: 'ps1', name: 'Endorse Check', type: 'checkbox', appliesTo: 'onsigner' },
+    { id: 'ps2', name: 'Med. Fitness', type: 'date', appliesTo: 'onsigner' },
+    { id: 'ps3', name: 'Handover Doc', type: 'checkbox', appliesTo: 'offsigner' },
+  ]
+};
 
 // --- MAIN APP COMPONENT ---
 
 export default function App() {
+  const [fbUser, setFbUser] = useState(null);
   const [currentUser, setCurrentUser] = useState(() => {
     const savedUser = localStorage.getItem('armonaCurrentUser');
     return savedUser ? JSON.parse(savedUser) : null;
   });
+  
   const [activeTab, setActiveTab] = useState('dashboard');
   
-  const [ships, setShips] = useState(initialShips);
-  const [crew, setCrew] = useState(initialCrew);
-  const [matrix, setMatrix] = useState(initialMatrix);
-  const [procSchema, setProcSchema] = useState(initialProcSchema);
-  const [procedures, setProcedures] = useState(initialProcedures);
-  const [evaluations, setEvaluations] = useState(initialEvals);
-  const [debriefings, setDebriefings] = useState(initialDebriefings);
-  const [users, setUsers] = useState([{ id: 'u1', username: 'Admin', password: 'Bt.admin.86!', role: 'admin' }]);
+  // Realtime Firebase States
+  const [ships, setShips] = useState([]);
+  const [crew, setCrew] = useState([]);
+  const [matrix, setMatrix] = useState([]);
+  const [procSchema, setProcSchema] = useState([]);
+  const [procedures, setProcedures] = useState([]);
+  const [evaluations, setEvaluations] = useState([]);
+  const [debriefings, setDebriefings] = useState([]);
+  const [users, setUsers] = useState([]);
 
   const [evalPrefill, setEvalPrefill] = useState(null);
+  const [isDbLoading, setIsDbLoading] = useState(true);
 
   // Modal States
   const [lineupModal, setLineupModal] = useState({ isOpen: false, shipId: null });
@@ -102,7 +103,57 @@ export default function App() {
   const [editContractModal, setEditContractModal] = useState({ isOpen: false, crew: null });
   const [deleteWarnModal, setDeleteWarnModal] = useState({ isOpen: false, message: '', crewId: null });
 
-  // Helpers
+  // --- FIREBASE INITIALIZATION & SUBSCRIPTIONS ---
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+           await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+           await signInAnonymously(auth);
+        }
+      } catch (err) { console.error("Firebase Auth Error:", err); }
+    };
+    initAuth();
+    return onAuthStateChanged(auth, setFbUser);
+  }, []);
+
+  useEffect(() => {
+    if (!fbUser) return;
+    
+    const unsubShips = onSnapshot(collection(db, getPath('ships')), snap => setShips(snap.docs.map(d => ({id: d.id, ...d.data()}))), console.error);
+    const unsubCrew = onSnapshot(collection(db, getPath('crew')), snap => setCrew(snap.docs.map(d => ({id: d.id, ...d.data()}))), console.error);
+    const unsubProcs = onSnapshot(collection(db, getPath('procedures')), snap => setProcedures(snap.docs.map(d => ({id: d.id, ...d.data()}))), console.error);
+    const unsubEvals = onSnapshot(collection(db, getPath('evaluations')), snap => setEvaluations(snap.docs.map(d => ({id: d.id, ...d.data()}))), console.error);
+    const unsubDebriefs = onSnapshot(collection(db, getPath('debriefings')), snap => setDebriefings(snap.docs.map(d => ({id: d.id, ...d.data()}))), console.error);
+    const unsubUsers = onSnapshot(collection(db, getPath('appUsers')), snap => {
+      setUsers(snap.docs.map(d => ({id: d.id, ...d.data()})));
+      setIsDbLoading(false);
+    }, console.error);
+
+    const unsubMatrix = onSnapshot(doc(db, getPath('settings'), 'rank_matrix'), snap => {
+      if(snap.exists()) setMatrix(snap.data().items || []);
+    }, console.error);
+    
+    const unsubSchema = onSnapshot(doc(db, getPath('settings'), 'proc_schema'), snap => {
+      if(snap.exists()) setProcSchema(snap.data().items || []);
+    }, console.error);
+
+    return () => { unsubShips(); unsubCrew(); unsubProcs(); unsubEvals(); unsubDebriefs(); unsubUsers(); unsubMatrix(); unsubSchema(); };
+  }, [fbUser]);
+
+
+  // --- FIREBASE ACTIONS ---
+  
+  const handleSeedDatabase = async () => {
+    setIsDbLoading(true);
+    await setDoc(doc(db, getPath('appUsers'), 'u1'), { username: 'Admin', password: 'Bt.admin.86!', role: 'admin' });
+    await setDoc(doc(db, getPath('settings'), 'rank_matrix'), { items: SEED_DATA.matrix });
+    await setDoc(doc(db, getPath('settings'), 'proc_schema'), { items: SEED_DATA.schema });
+    for (let s of SEED_DATA.ships) await setDoc(doc(db, getPath('ships'), s.id), s);
+    setIsDbLoading(false);
+  };
+
   const handleLogin = (user) => {
     setCurrentUser(user);
     localStorage.setItem('armonaCurrentUser', JSON.stringify(user));
@@ -115,79 +166,52 @@ export default function App() {
 
   const getDaysBetween = (d1, d2) => Math.round((new Date(d2).getTime() - new Date(d1).getTime()) / (1000 * 60 * 60 * 24));
   
-  const handleAddNote = (targetId, targetType, text) => {
+  const handleAddNote = async (targetId, targetType, text) => {
     const note = { id: generateId(), author: currentUser.username, text, date: new Date().toISOString() };
-    if (targetType === 'ship') {
-      setShips(ships.map(s => s.id === targetId ? { ...s, notes: [...(s.notes || []), note] } : s));
-    } else {
-      setCrew(crew.map(c => c.id === targetId ? { ...c, notes: [...(c.notes || []), note] } : c));
+    const collectionName = targetType === 'ship' ? 'ships' : 'crew';
+    const existing = (targetType === 'ship' ? ships : crew).find(x => x.id === targetId);
+    if(existing) {
+      await updateDoc(doc(db, getPath(collectionName), targetId), { notes: [...(existing.notes || []), note] });
     }
   };
 
-  const handleDeleteNote = (targetId, targetType, noteId) => {
-    if (targetType === 'ship') {
-      setShips(ships.map(s => s.id === targetId ? { ...s, notes: s.notes.filter(n => n.id !== noteId) } : s));
-    } else {
-      setCrew(crew.map(c => c.id === targetId ? { ...c, notes: c.notes.filter(n => n.id !== noteId) } : c));
+  const handleDeleteNote = async (targetId, targetType, noteId) => {
+    const collectionName = targetType === 'ship' ? 'ships' : 'crew';
+    const existing = (targetType === 'ship' ? ships : crew).find(x => x.id === targetId);
+    if(existing) {
+      await updateDoc(doc(db, getPath(collectionName), targetId), { notes: existing.notes.filter(n => n.id !== noteId) });
     }
   };
 
-  const handleAssign = (shipId, rank, startDate, endDate, handleOverlap, addToProc, assignCrewMember) => {
-    let updatedCrew = [...crew];
-    
-    // Çakışma durumunda (Overlap - Relieve) mevcut personeli indir
+  const handleAssign = async (shipId, rank, startDate, endDate, handleOverlap, addToProc, assignCrewMember) => {
     if (handleOverlap === 'relieve') {
-      const existing = updatedCrew.find(c => c.shipId === shipId && c.rank === rank && c.status === 'onboard');
+      const existing = crew.find(c => c.shipId === shipId && c.rank === rank && c.status === 'onboard');
       if (existing) { 
-        existing.status = 'onleave'; 
-        existing.shipId = null; 
-        
-        // Eğer indirileni de prosedüre eklemek isterseniz buraya logic eklenebilir, 
-        // şu an sadece atananı ekliyoruz
+        await updateDoc(doc(db, getPath('crew'), existing.id), { status: 'onleave', shipId: null });
       }
     }
 
-    // Yeni personeli gemiye ata
-    const target = updatedCrew.find(c => c.id === assignCrewMember.id);
-    if (target) {
-      target.status = 'onboard'; 
-      target.shipId = shipId; 
-      target.rank = rank;
-      target.contractStart = startDate; 
-      target.contractEnd = endDate;
-    }
+    await updateDoc(doc(db, getPath('crew'), assignCrewMember.id), { 
+      status: 'onboard', shipId, rank, contractStart: startDate, contractEnd: endDate 
+    });
     
-    setCrew(updatedCrew); 
-    
-    // Prosedürlere (Onsigner) ekle
     if (addToProc) {
        const shipName = ships.find(s => s.id === shipId)?.name;
        const rankInfo = matrix.find(m => m.rank === rank);
        const dept = rankInfo ? rankInfo.dept : 'Other';
 
-       const newProc = {
-          id: generateId(), 
-          crewId: assignCrewMember.id, 
-          crewName: assignCrewMember.name,
-          rank: rank, 
-          dept: dept, 
-          shipName: shipName,
-          type: 'onsigner', 
-          date: startDate, // Katılım tarihini prosedür tarihi olarak al
-          status: 'active', 
-          evaluationDone: false, 
-          debriefDone: false, 
-          dynamicData: {}, 
-          notes: []
-        };
-        setProcedures(prev => [newProc, ...prev]);
+       const newProcId = generateId();
+       await setDoc(doc(db, getPath('procedures'), newProcId), {
+          crewId: assignCrewMember.id, crewName: assignCrewMember.name, rank: rank, dept: dept, shipName: shipName,
+          type: 'onsigner', date: startDate, status: 'active', evaluationDone: false, debriefDone: false, 
+          dynamicData: {}, notes: []
+        });
     }
-    
     setAssignModal({ isOpen: false, crew: null });
   };
 
-  const handleSignOff = (date, addToProc, crewMember) => {
-    setCrew(prev => prev.map(c => c.id === crewMember.id ? { ...c, status: 'onleave', shipId: null, contractStart: '', contractEnd: '' } : c));
+  const handleSignOff = async (date, addToProc, crewMember) => {
+    await updateDoc(doc(db, getPath('crew'), crewMember.id), { status: 'onleave', shipId: null, contractStart: '', contractEnd: '' });
     
     let snapshotData = null;
     const rankInfo = matrix.find(m => m.rank === crewMember.rank);
@@ -195,10 +219,7 @@ export default function App() {
     
     if (['Master', 'Chief Engineer'].includes(crewMember.rank)) {
       snapshotData = crew.filter(c => 
-        c.shipId === crewMember.shipId && 
-        c.id !== crewMember.id && 
-        new Date(c.contractStart).getTime() <= today.getTime() &&
-        matrix.find(m => m.rank === c.rank)?.dept === dept
+        c.shipId === crewMember.shipId && c.id !== crewMember.id && new Date(c.contractStart).getTime() <= today.getTime() && matrix.find(m => m.rank === c.rank)?.dept === dept
       ).map(c => ({ name: c.name, rank: c.rank, score: '' }));
     } else {
       const managerRank = dept === 'Engine' ? 'Chief Engineer' : 'Master';
@@ -207,13 +228,12 @@ export default function App() {
     }
 
     if (addToProc) {
-      const newProc = {
-        id: generateId(), crewId: crewMember.id, crewName: crewMember.name,
-        rank: crewMember.rank, dept: dept, shipName: ships.find(s=>s.id===crewMember.shipId)?.name,
+      const newProcId = generateId();
+      await setDoc(doc(db, getPath('procedures'), newProcId), {
+        crewId: crewMember.id, crewName: crewMember.name, rank: crewMember.rank, dept: dept, shipName: ships.find(s=>s.id===crewMember.shipId)?.name,
         type: 'offsigner', date: date, status: 'active', evaluationDone: false, debriefDone: false, 
         dynamicData: {}, notes: [], evalSnapshot: snapshotData
-      };
-      setProcedures(prev => [newProc, ...prev]);
+      });
     }
     setSignOffModal({ isOpen: false, crew: null });
   };
@@ -226,8 +246,13 @@ export default function App() {
     }
   };
 
+  // --- LOGIN & LOADING CHECK ---
+  if (isDbLoading && fbUser) {
+    return <div className="flex h-screen items-center justify-center bg-[#0f172a] text-white">Loading database...</div>;
+  }
+
   if (!currentUser) {
-    return <Login users={users} onLogin={handleLogin} />;
+    return <Login users={users} onLogin={handleLogin} isDbEmpty={users.length === 0} onSeed={handleSeedDatabase} />;
   }
 
   const activeDebriefsCount = debriefings.filter(d => d.status === 'active').length;
@@ -276,22 +301,25 @@ export default function App() {
           {activeTab === 'procedures' && currentUser.role !== 'viewer' && (
             <Procedures 
               procedures={procedures} schema={procSchema} currentUser={currentUser}
-              onUpdateProc={(id, field, val) => setProcedures(prev => prev.map(p => p.id === id ? {...p, [field]: val} : p))}
-              onUpdateDynamic={(id, field, val) => setProcedures(prev => prev.map(p => p.id === id ? {...p, dynamicData: {...p.dynamicData, [field]: val}} : p))}
-              onDeleteProc={(id) => setProcedures(prev => prev.filter(p => p.id !== id))}
-              onAddEval={(proc) => { 
+              onUpdateProc={async (id, field, val) => await updateDoc(doc(db, getPath('procedures'), id), { [field]: val })}
+              onUpdateDynamic={async (id, field, val) => {
+                 const p = procedures.find(x=>x.id === id);
+                 if(p) await updateDoc(doc(db, getPath('procedures'), id), { dynamicData: {...p.dynamicData, [field]: val} });
+              }}
+              onDeleteProc={async (id) => await deleteDoc(doc(db, getPath('procedures'), id))}
+              onAddEval={async (proc) => { 
                 setEvalPrefill(proc); 
                 setActiveTab('eval_add'); 
-                setProcedures(prev => prev.map(p => p.id === proc.id ? {...p, evaluationDone: true} : p));
+                await updateDoc(doc(db, getPath('procedures'), proc.id), { evaluationDone: true });
               }}
-              onAddDebrief={(proc) => {
+              onAddDebrief={async (proc) => {
                 const newDebrief = { 
-                  id: generateId(), crewName: proc.crewName, shipName: proc.shipName, rank: proc.rank, 
+                  crewName: proc.crewName, shipName: proc.shipName, rank: proc.rank, 
                   signOffDate: proc.date, startDate: '', endDate: '', status: 'active', 
                   depts: [{name:'Deck', note:'', score:''},{name:'Engine', note:'', score:''},{name:'Safety', note:'', score:''},{name:'HR', note:'', score:''}] 
                 };
-                setDebriefings(prev => [newDebrief, ...prev]);
-                setProcedures(prev => prev.map(p => p.id === proc.id ? {...p, debriefDone: true} : p));
+                await setDoc(doc(db, getPath('debriefings'), generateId()), newDebrief);
+                await updateDoc(doc(db, getPath('procedures'), proc.id), { debriefDone: true });
                 setActiveTab('debriefings');
               }}
             />
@@ -299,35 +327,46 @@ export default function App() {
           {activeTab === 'eval_overview' && (
              <EvaluationsOverview 
                evals={evaluations} ships={ships} matrix={matrix} currentUser={currentUser}
-               onDelete={(id) => setEvaluations(prev => prev.filter(e => e.id !== id))}
+               onDelete={async (id) => await deleteDoc(doc(db, getPath('evaluations'), id))}
              />
           )}
           {activeTab === 'eval_add' && currentUser.role !== 'viewer' && (
             <EvaluationsAdd 
               currentUser={currentUser} crew={crew} ships={ships} prefillData={evalPrefill} today={today}
-              onAdd={(newEvals) => { setEvaluations(prev => [...newEvals, ...prev]); setEvalPrefill(null); setActiveTab('eval_overview'); }}
+              onAdd={async (newEvals) => { 
+                 for(let e of newEvals) await setDoc(doc(db, getPath('evaluations'), e.id), e);
+                 setEvalPrefill(null); setActiveTab('eval_overview'); 
+              }}
               onClearPrefill={() => setEvalPrefill(null)}
             />
           )}
           {activeTab === 'debriefings' && (
              <Debriefings 
                debriefings={debriefings} currentUser={currentUser}
-               onUpdate={(id, field, val) => setDebriefings(prev => prev.map(d => d.id === id ? {...d, [field]: val} : d))}
-               onDelete={(id) => setDebriefings(prev => prev.filter(d => d.id !== id))}
-               onUpdateDept={(id, index, field, val) => setDebriefings(prev => prev.map(d => {
-                 if(d.id !== id) return d;
-                 const newDepts = [...d.depts]; newDepts[index] = { ...newDepts[index], [field]: val };
-                 return {...d, depts: newDepts};
-               }))}
+               onUpdate={async (id, field, val) => await updateDoc(doc(db, getPath('debriefings'), id), { [field]: val })}
+               onDelete={async (id) => await deleteDoc(doc(db, getPath('debriefings'), id))}
+               onUpdateDept={async (id, index, field, val) => {
+                 const d = debriefings.find(x=>x.id === id);
+                 if(d) {
+                   const newDepts = [...d.depts]; newDepts[index] = { ...newDepts[index], [field]: val };
+                   await updateDoc(doc(db, getPath('debriefings'), id), { depts: newDepts });
+                 }
+               }}
              />
           )}
           {activeTab === 'settings' && currentUser.role === 'admin' && (
             <SettingsPage 
-              matrix={matrix} setMatrix={setMatrix} 
-              procSchema={procSchema} setProcSchema={setProcSchema} 
-              users={users} setUsers={setUsers} 
-              ships={ships} setShips={setShips}
-              currentUser={currentUser} setCurrentUser={setCurrentUser} 
+              matrix={matrix} setMatrix={async (nm) => await setDoc(doc(db, getPath('settings'), 'rank_matrix'), { items: nm })} 
+              procSchema={procSchema} setProcSchema={async (ns) => await setDoc(doc(db, getPath('settings'), 'proc_schema'), { items: ns })} 
+              users={users} 
+              onAddUser={async (u) => await setDoc(doc(db, getPath('appUsers'), u.id), u)}
+              onUpdateUser={async (u) => await updateDoc(doc(db, getPath('appUsers'), u.id), u)}
+              onDeleteUser={async (id) => await deleteDoc(doc(db, getPath('appUsers'), id))}
+              ships={ships} 
+              onAddShip={async (s) => await setDoc(doc(db, getPath('ships'), s.id), s)}
+              onUpdateShip={async (s) => await updateDoc(doc(db, getPath('ships'), s.id), s)}
+              onDeleteShip={async (id) => await deleteDoc(doc(db, getPath('ships'), id))}
+              currentUser={currentUser} setCurrentUser={handleLogin} 
             />
           )}
         </main>
@@ -370,11 +409,11 @@ export default function App() {
         <CrewFormModal
           matrix={matrix} crewMember={crewFormModal.crew}
           onClose={() => setCrewFormModal({ isOpen: false, crew: null })}
-          onConfirm={(newCrewData) => {
+          onConfirm={async (newCrewData) => {
             if (crewFormModal.crew) {
-              setCrew(crew.map(c => c.id === crewFormModal.crew.id ? { ...c, ...newCrewData } : c));
+              await updateDoc(doc(db, getPath('crew'), crewFormModal.crew.id), newCrewData);
             } else {
-              setCrew([...crew, { ...newCrewData, id: generateId(), status: 'onleave', shipId: null, contractStart: '', contractEnd: '', notes: [], isProbation: false, rank: 'TBA' }]);
+              await setDoc(doc(db, getPath('crew'), generateId()), { ...newCrewData, status: 'onleave', shipId: null, contractStart: '', contractEnd: '', notes: [], isProbation: false, rank: 'TBA' });
             }
             setCrewFormModal({ isOpen: false, crew: null });
           }}
@@ -385,8 +424,8 @@ export default function App() {
         <EditContractModal
            crewMember={editContractModal.crew}
            onClose={() => setEditContractModal({ isOpen: false, crew: null })}
-           onConfirm={(start, end) => {
-             setCrew(prev => prev.map(c => c.id === editContractModal.crew?.id ? { ...c, contractStart: start, contractEnd: end } : c));
+           onConfirm={async (start, end) => {
+             await updateDoc(doc(db, getPath('crew'), editContractModal.crew.id), { contractStart: start, contractEnd: end });
              setEditContractModal({ isOpen: false, crew: null });
            }}
         />
@@ -396,8 +435,8 @@ export default function App() {
         <DeleteConfirmModal 
           message={deleteWarnModal.message} showConfirm={!!deleteWarnModal.crewId}
           onClose={() => setDeleteWarnModal({ isOpen: false, message: '', crewId: null })}
-          onConfirm={() => {
-            setCrew(crew.filter(c => c.id !== deleteWarnModal.crewId));
+          onConfirm={async () => {
+            await deleteDoc(doc(db, getPath('crew'), deleteWarnModal.crewId));
             setDeleteWarnModal({ isOpen: false, message: '', crewId: null });
           }}
         />
@@ -1489,7 +1528,7 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelet
     );
   }
 
-function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, users, setUsers, ships, setShips, currentUser, setCurrentUser }) {
+function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, users, onAddUser, onUpdateUser, onDeleteUser, ships, onAddShip, onUpdateShip, onDeleteShip, currentUser, setCurrentUser }) {
   const [newCol, setNewCol] = useState({ name: '', type: 'checkbox', appliesTo: 'both' });
   const [newRank, setNewRank] = useState({ rank: '', dept: 'Deck', checkOverlap: false, competencies: [] });
   const [newCompText, setNewCompText] = useState({});
@@ -1545,18 +1584,18 @@ function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, users, set
 
   const addUser = () => {
     if(!newUser.username || !newUser.password) return;
-    setUsers([...users, { ...newUser, id: 'u'+Date.now() }]);
+    onAddUser({ ...newUser, id: 'u'+Date.now() });
     setNewUser({ username: '', password: '', role: 'user' });
   };
 
   const deleteUser = (id) => {
     if (users.find(u => u.id === id)?.role === 'admin') return; 
-    setUsers(users.filter(u => u.id !== id));
+    onDeleteUser(id);
   };
   
   const addShip = () => {
     if(!newShip.name) return;
-    setShips([...ships, { ...newShip, id: 's'+Date.now(), notes: [] }]);
+    onAddShip({ ...newShip, id: 's'+Date.now(), notes: [] });
     setNewShip({ name: '', flag: 'TBA', minSafeManning: 10, cabinCapacity: 15, lsaCapacity: 20, color: 'blue' });
   };
 
@@ -1608,7 +1647,7 @@ function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, users, set
                       {isEditing ? (
                         <div className="flex justify-end gap-2 items-center">
                           <button onClick={() => {
-                              setUsers(users.map(user => user.id === editingUserId ? editUserData : user));
+                              onUpdateUser(editUserData);
                               if (currentUser.id === editingUserId) setCurrentUser(editUserData);
                               setEditingUserId(null);
                           }} className="text-white bg-green-500 hover:bg-green-600 px-2 py-1 rounded font-bold text-xs shadow-sm">Save</button>
@@ -1681,13 +1720,13 @@ function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, users, set
                     <td className="p-3 text-right">
                       {isEditing ? (
                         <div className="flex justify-end gap-2 items-center">
-                          <button onClick={() => { setShips(ships.map(ship => ship.id === editingShipId ? editShipData : ship)); setEditingShipId(null); }} className="text-white bg-green-500 hover:bg-green-600 px-2 py-1 rounded font-bold text-xs shadow-sm">Save</button>
+                          <button onClick={() => { onUpdateShip(editShipData); setEditingShipId(null); }} className="text-white bg-green-500 hover:bg-green-600 px-2 py-1 rounded font-bold text-xs shadow-sm">Save</button>
                           <button onClick={()=>setEditingShipId(null)} className="text-slate-400 hover:text-slate-600 text-xs font-medium">Cancel</button>
                         </div>
                       ) : (
                         <div className="flex justify-end gap-2">
                            <button onClick={() => { setEditingShipId(s.id); setEditShipData(s); }} className="text-slate-400 hover:text-blue-500 p-1"><Edit2 size={16}/></button>
-                           <button onClick={()=>setShips(ships.filter(ship => ship.id !== s.id))} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
+                           <button onClick={()=>onDeleteShip(s.id)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
                         </div>
                       )}
                     </td>
@@ -1808,129 +1847,11 @@ function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, users, set
   );
 }
 
-function CrewFormModal({ matrix, crewMember, onClose, onConfirm }) {
-  const isEdit = !!crewMember;
-  const [name, setName] = useState(crewMember?.name || '');
-  const [competency, setCompetency] = useState(crewMember?.competency || '');
-  const [readiness, setReadiness] = useState(crewMember?.readinessDate || '');
-
-  const allComps = useMemo(() => {
-    const set = new Set();
-    matrix.forEach(m => m.competencies.forEach(c => set.add(c)));
-    return Array.from(set);
-  }, [matrix]);
-
-  return (
-    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
-        <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-            {isEdit ? <Edit2 size={20} className="text-blue-500"/> : <UserPlus size={20} className="text-blue-500"/>}
-            {isEdit ? 'Edit Crew Details' : 'Add New Crew'}
-          </h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 bg-white p-1 rounded shadow-sm border border-slate-200"><X size={18}/></button>
-        </div>
-        
-        <div className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
-            <input type="text" className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Ahmet Yılmaz"/>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Competency (License)</label>
-            <select className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-white" value={competency} onChange={e=>setCompetency(e.target.value)}>
-              <option value="">-- Select Competency --</option>
-              {allComps.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Readiness Date (Optional)</label>
-            <input type="date" className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" value={readiness} onChange={e=>setReadiness(e.target.value)}/>
-          </div>
-        </div>
-        
-        <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors">Cancel</button>
-          <button 
-            disabled={!name || !competency}
-            onClick={() => onConfirm({ name, competency, readinessDate: readiness })} 
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
-          >
-            {isEdit ? 'Save Changes' : 'Add to Pool'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DeleteConfirmModal({ message, showConfirm, onClose, onConfirm }) {
-  return (
-    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[70] p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden p-6 text-center">
-        <AlertTriangle size={48} className="mx-auto text-red-500 mb-4" />
-        <h3 className="text-lg font-bold text-slate-800 mb-2">{showConfirm ? 'Confirm Deletion' : 'Cannot Delete'}</h3>
-        <p className="text-sm text-slate-600 mb-6">{message}</p>
-        <div className="flex justify-center gap-3">
-           <button onClick={onClose} className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg font-bold text-sm">Close</button>
-           {showConfirm && (
-             <button onClick={onConfirm} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-sm">Yes, Delete</button>
-           )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function NotesModal({ isOpen, name, notes, currentUser, onClose, onAdd, onDelete }) {
-  const [text, setText] = useState('');
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-[70] p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md flex flex-col h-[500px]">
-        <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-xl shrink-0">
-          <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 truncate pr-2"><MessageCircle size={20} className="text-blue-500 shrink-0"/> Notes: {name}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 shrink-0"><X size={20} /></button>
-        </div>
-        
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-100/50">
-          {notes?.length === 0 ? <p className="text-center text-slate-400 text-sm mt-10">No notes yet.</p> : 
-            notes.map((n, i) => (
-              <div key={n.id || i} className="bg-white p-3 rounded-lg shadow-sm border border-slate-100 group relative">
-                <p className="text-slate-700 text-sm whitespace-pre-wrap">{n.text}</p>
-                <div className="flex justify-between items-center mt-2 text-[10px] text-slate-400 font-medium border-t border-slate-50 pt-2">
-                  <span>{n.author}</span>
-                  <span>{new Date(n.date).toLocaleString()}</span>
-                </div>
-                {currentUser.role === 'admin' && (
-                  <button onClick={()=>onDelete(n.id)} className="absolute top-2 right-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity bg-white"><Trash2 size={14}/></button>
-                )}
-              </div>
-            ))
-          }
-        </div>
-        
-        {currentUser.role !== 'viewer' && (
-          <div className="p-4 border-t border-slate-200 bg-white rounded-b-xl flex gap-2 shrink-0">
-            <input 
-              type="text" placeholder="Type a note..." 
-              className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              value={text} onChange={e=>setText(e.target.value)}
-              onKeyDown={e => { if(e.key==='Enter' && text) { onAdd(text); setText(''); } }}
-            />
-            <button disabled={!text} onClick={() => { onAdd(text); setText(''); }} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors">Add</button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Login({ users, onLogin }) {
+function Login({ users, onLogin, isDbEmpty, onSeed }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [seeding, setSeeding] = useState(false);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -1940,6 +1861,12 @@ function Login({ users, onLogin }) {
     } else {
       setError('Invalid username or password.');
     }
+  };
+
+  const handleInitialize = async () => {
+    setSeeding(true);
+    await onSeed();
+    setSeeding(false);
   };
 
   return (
@@ -1953,21 +1880,34 @@ function Login({ users, onLogin }) {
           <p className="text-slate-500 text-sm mt-1.5 font-medium">Please sign in to your account</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-medium border border-red-200 flex items-center justify-center gap-2"><AlertTriangle size={16}/> {error}</div>}
-          
-          <div>
-            <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Username</label>
-            <input type="text" value={username} onChange={e=>setUsername(e.target.value)} className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all bg-slate-50 focus:bg-white font-medium" required />
-          </div>
-          
-          <div>
-            <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Password</label>
-            <input type="password" value={password} onChange={e=>setPassword(e.target.value)} className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all bg-slate-50 focus:bg-white font-medium" required />
-          </div>
+        {isDbEmpty ? (
+           <div className="space-y-4 text-center">
+              <div className="bg-amber-50 text-amber-700 p-4 rounded-lg border border-amber-200 text-sm">
+                 <AlertTriangle size={24} className="mx-auto mb-2 text-amber-500"/>
+                 <strong>Database is empty!</strong><br/>
+                 Click the button below to initialize the default Admin account and configuration.
+              </div>
+              <button onClick={handleInitialize} disabled={seeding} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition-colors shadow-sm disabled:opacity-50">
+                 {seeding ? 'Initializing Database...' : 'Initialize First Run Data'}
+              </button>
+           </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-medium border border-red-200 flex items-center justify-center gap-2"><AlertTriangle size={16}/> {error}</div>}
+            
+            <div>
+              <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Username</label>
+              <input type="text" value={username} onChange={e=>setUsername(e.target.value)} className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all bg-slate-50 focus:bg-white font-medium" required />
+            </div>
+            
+            <div>
+              <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Password</label>
+              <input type="password" value={password} onChange={e=>setPassword(e.target.value)} className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all bg-slate-50 focus:bg-white font-medium" required />
+            </div>
 
-          <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-3 rounded-lg transition-colors mt-2 shadow-sm">Secure Sign In</button>
-        </form>
+            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-3 rounded-lg transition-colors mt-2 shadow-sm">Secure Sign In</button>
+          </form>
+        )}
         
         <div className="mt-8 text-center text-xs text-slate-400 font-medium">
           Custom Crewing Software <br/> designed by Batuhan Tas
