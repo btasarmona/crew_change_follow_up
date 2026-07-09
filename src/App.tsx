@@ -10,7 +10,7 @@ import {
 // --- CUSTOM LOGO COMPONENT ---
 const ArmonaLogo = ({ className = "w-8 h-8" }) => (
   <img 
-    src="https://www.atlantis-tankers.com/assets/images/logo.png" 
+    src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAACXBIWXMAAAsTAAALEwEAmpwYAAADw0lEQVR4nO2cS0hUYRTHf/dxHDFL0yQxsyxKSwrMIsIgSChxI1wEhUFthG4i1CJo46p9W0TQRqgWLVpEUEFBFBVBhUVRVBSV0wVpk81oU5w5T+fEKIy+p+N9P+45P3jB6B3O/X7cc9/vA2IURVEURVEURVEURVEURVEURVEURVFUnZgS6wR05RzQAzQDbcAAYAG6gXagFVgArASeAKPAM+AFkIu1x6kgyR4g2+kEXgPPAX/2uH2K2SgqZAA4AkyS8r0K3AbWg1j2uH16l14D2oExUpqHwHagwB7Xn6xCXgFXSWm8AboVR38G6CWlaQb67HG1SioEcB0Y10jzEdhpi7NNUiGAO8C1Rpo7wHZbvG1ZIsxHwF1SjG5giC2+tkwxA8BpUgx3gD22+NqyRMwHwHVSiBfAA2CRLc62SIVYBpwH+kj+fgq8Alba4myLVIIsBS4AnSRvXgC/gD22eNsi1SAZQAMww8XGgIu2uNoi1SJ9wH2gF2vjO3ABuGOLrS2rRBZ4BDSQPHkPnAOe2uJqy2qRbUATyZNVwBdgiy2udtkihQCOkVx8P1gCrrbF1S4rhQyQfP+zT8A9IF/tX21SIT1AJ/AQK82r2tP5R8hQ8+FmX+1fbVIhc61hU17tX22yUciVzS9kH/AIK+0x1P7VJhXSD8y10pyv9q82yR/Xl1hpHlT7V5tUCGA1Vpon1P7VJhWyHHiHleY9sNn3L7ZIhVQA54FXWGmeAQfl1n4UuK32sXapECgAaoHzwC3mK+Yq0AuMAv1AJzAOtAKdWKkuA/uB1cBeYBewF9gPVAH7gBrZtwIoy2gWJ1oh4Kj/mY/AAyAvU6zFQDlQAxR5OIsNfAHwM6NZnMgtB1yXk942YAaL2C6z4/8rRz8R/1E/y2geJ+x1iB/XgQ9y0psLFMroN1t+94r87s5oHiesU4gA7iM10X1ArYxm0wA0y+92Gs3jhLUKEcDlpCa6Exj3sZ0sB7rkdxeM5nHCSoU0k5roe6DQx3YqA2rkd7ON5nHCSoUI4CFSE+2x4T1Z2Y+E0TxOWKeQAaBCfn8YyM9oNpU+z2A0jxPWKUTAdfndw0CujH5r5XezHn41h6VClsiJXkH68kH1Z42V0TxOWKmQd2y64y/sP3c2fW2m2A6g1P/MaTz/mJqV1yECeIiVxk1g3Md2svq032geJ6xUiF//c7rZ9B2p/X8K/EfyP0eG8mZgD2Gcwj/jNfAL2AmsBQqAIuX7L/AJeAC8At4Cr4EZYAKYBB4Do8AQ8BwYBW4CzwFX/n8UoigS/AdGTV571mIeQwAAAABJRU5ErkJggg==" 
     alt="Armona Crew Manager Logo" 
     className={`${className} object-contain`}
   />
@@ -25,6 +25,7 @@ const firebaseConfig = {
   messagingSenderId: "224379023927",
   appId: "1:224379023927:web:4e6b7cd7dc87519b0685b2"
 };
+
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -69,18 +70,16 @@ const initialProcSchema = [
 ];
 
 const initialProcedures = [];
-
-const initialEvals = [
-  { id: 'e1', crewName: 'Mike Johnson', rank: 'AB', shipName: 'MT Alpha', date: '2026-01-01', score: 85, evaluatedBy: 'John Doe' },
-  { id: 'e2', crewName: 'Jane Smith', rank: 'Chief Engineer', shipName: 'MT Alpha', date: '2026-02-15', score: 65, evaluatedBy: 'Office' }
-];
-
+const initialEvals = [];
 const initialDebriefings = [];
 
 // --- MAIN APP COMPONENT ---
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState(null); 
+  const [currentUser, setCurrentUser] = useState(() => {
+    const savedUser = localStorage.getItem('armonaCurrentUser');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
   const [activeTab, setActiveTab] = useState('dashboard');
   
   const [ships, setShips] = useState(initialShips);
@@ -100,9 +99,20 @@ export default function App() {
   const [assignModal, setAssignModal] = useState({ isOpen: false, crew: null });
   const [signOffModal, setSignOffModal] = useState({ isOpen: false, crew: null });
   const [crewFormModal, setCrewFormModal] = useState({ isOpen: false, crew: null });
+  const [editContractModal, setEditContractModal] = useState({ isOpen: false, crew: null });
   const [deleteWarnModal, setDeleteWarnModal] = useState({ isOpen: false, message: '', crewId: null });
 
   // Helpers
+  const handleLogin = (user) => {
+    setCurrentUser(user);
+    localStorage.setItem('armonaCurrentUser', JSON.stringify(user));
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('armonaCurrentUser');
+  };
+
   const getDaysBetween = (d1, d2) => Math.round((new Date(d2).getTime() - new Date(d1).getTime()) / (1000 * 60 * 60 * 24));
   
   const handleAddNote = (targetId, targetType, text) => {
@@ -120,6 +130,60 @@ export default function App() {
     } else {
       setCrew(crew.map(c => c.id === targetId ? { ...c, notes: c.notes.filter(n => n.id !== noteId) } : c));
     }
+  };
+
+  const handleAssign = (shipId, rank, startDate, endDate, handleOverlap, addToProc, assignCrewMember) => {
+    let updatedCrew = [...crew];
+    
+    // Çakışma durumunda (Overlap - Relieve) mevcut personeli indir
+    if (handleOverlap === 'relieve') {
+      const existing = updatedCrew.find(c => c.shipId === shipId && c.rank === rank && c.status === 'onboard');
+      if (existing) { 
+        existing.status = 'onleave'; 
+        existing.shipId = null; 
+        
+        // Eğer indirileni de prosedüre eklemek isterseniz buraya logic eklenebilir, 
+        // şu an sadece atananı ekliyoruz
+      }
+    }
+
+    // Yeni personeli gemiye ata
+    const target = updatedCrew.find(c => c.id === assignCrewMember.id);
+    if (target) {
+      target.status = 'onboard'; 
+      target.shipId = shipId; 
+      target.rank = rank;
+      target.contractStart = startDate; 
+      target.contractEnd = endDate;
+    }
+    
+    setCrew(updatedCrew); 
+    
+    // Prosedürlere (Onsigner) ekle
+    if (addToProc) {
+       const shipName = ships.find(s => s.id === shipId)?.name;
+       const rankInfo = matrix.find(m => m.rank === rank);
+       const dept = rankInfo ? rankInfo.dept : 'Other';
+
+       const newProc = {
+          id: generateId(), 
+          crewId: assignCrewMember.id, 
+          crewName: assignCrewMember.name,
+          rank: rank, 
+          dept: dept, 
+          shipName: shipName,
+          type: 'onsigner', 
+          date: startDate, // Katılım tarihini prosedür tarihi olarak al
+          status: 'active', 
+          evaluationDone: false, 
+          debriefDone: false, 
+          dynamicData: {}, 
+          notes: []
+        };
+        setProcedures(prev => [newProc, ...prev]);
+    }
+    
+    setAssignModal({ isOpen: false, crew: null });
   };
 
   const handleSignOff = (date, addToProc, crewMember) => {
@@ -163,7 +227,7 @@ export default function App() {
   };
 
   if (!currentUser) {
-    return <Login users={users} onLogin={setCurrentUser} />;
+    return <Login users={users} onLogin={handleLogin} />;
   }
 
   const activeDebriefsCount = debriefings.filter(d => d.status === 'active').length;
@@ -172,7 +236,7 @@ export default function App() {
     <div className="flex flex-col h-screen bg-[#f1f5f9] text-slate-800 font-sans">
       {/* Top Navbar */}
       <header className="bg-[#0f172a] text-white px-6 py-3 flex justify-between items-center shadow-md z-10 shrink-0">
-        <div className="font-bold text-base flex items-center gap-3 tracking-wide w-72">
+        <div className="font-bold text-lg flex items-center gap-3 tracking-wide w-72">
           <ArmonaLogo className="w-7 h-7" />
           ARMONA CREW MANAGER
         </div>
@@ -191,7 +255,7 @@ export default function App() {
             <span>Hi, <strong className="text-white">{currentUser.username}</strong></span>
             <span className="bg-slate-800 px-2 py-0.5 rounded text-[10px] uppercase font-bold text-slate-400">{currentUser.role}</span>
           </div>
-          <LogOut size={18} className="text-slate-400 hover:text-red-400 cursor-pointer" onClick={() => setCurrentUser(null)} title="Sign Out" />
+          <LogOut size={18} className="text-slate-400 hover:text-red-400 cursor-pointer" onClick={handleLogout} title="Sign Out" />
         </div>
       </header>
 
@@ -214,6 +278,7 @@ export default function App() {
               procedures={procedures} schema={procSchema} currentUser={currentUser}
               onUpdateProc={(id, field, val) => setProcedures(prev => prev.map(p => p.id === id ? {...p, [field]: val} : p))}
               onUpdateDynamic={(id, field, val) => setProcedures(prev => prev.map(p => p.id === id ? {...p, dynamicData: {...p.dynamicData, [field]: val}} : p))}
+              onDeleteProc={(id) => setProcedures(prev => prev.filter(p => p.id !== id))}
               onAddEval={(proc) => { 
                 setEvalPrefill(proc); 
                 setActiveTab('eval_add'); 
@@ -239,7 +304,7 @@ export default function App() {
           )}
           {activeTab === 'eval_add' && currentUser.role !== 'viewer' && (
             <EvaluationsAdd 
-              currentUser={currentUser} crew={crew} ships={ships} prefillData={evalPrefill}
+              currentUser={currentUser} crew={crew} ships={ships} prefillData={evalPrefill} today={today}
               onAdd={(newEvals) => { setEvaluations(prev => [...newEvals, ...prev]); setEvalPrefill(null); setActiveTab('eval_overview'); }}
               onClearPrefill={() => setEvalPrefill(null)}
             />
@@ -248,6 +313,7 @@ export default function App() {
              <Debriefings 
                debriefings={debriefings} currentUser={currentUser}
                onUpdate={(id, field, val) => setDebriefings(prev => prev.map(d => d.id === id ? {...d, [field]: val} : d))}
+               onDelete={(id) => setDebriefings(prev => prev.filter(d => d.id !== id))}
                onUpdateDept={(id, index, field, val) => setDebriefings(prev => prev.map(d => {
                  if(d.id !== id) return d;
                  const newDepts = [...d.depts]; newDepts[index] = { ...newDepts[index], [field]: val };
@@ -275,6 +341,7 @@ export default function App() {
           onClose={() => setLineupModal({ isOpen: false, shipId: null })}
           onSignOff={(c) => setSignOffModal({ isOpen: true, crew: c })}
           onNotes={(id, name) => setNotesModal({ isOpen: true, targetId: id, targetType: 'crew', targetName: name })}
+          onEditContract={(c) => setEditContractModal({ isOpen: true, crew: c })}
         />
       )}
 
@@ -293,17 +360,9 @@ export default function App() {
         <AssignModal 
           crewMember={assignModal.crew} ships={ships} matrix={matrix} onboardCrew={crew.filter(c=>c.status==='onboard')} today={today}
           onClose={() => setAssignModal({ isOpen: false, crew: null })}
-          onConfirm={(shipId, rank, startDate, endDate, handleOverlap) => {
-            let updatedCrew = [...crew];
-            if (handleOverlap === 'relieve') {
-              const existing = updatedCrew.find(c => c.shipId === shipId && c.rank === rank && c.status === 'onboard');
-              if (existing) { existing.status = 'onleave'; existing.shipId = null; }
-            }
-            const target = updatedCrew.find(c => c.id === assignModal.crew.id);
-            target.status = 'onboard'; target.shipId = shipId; target.rank = rank;
-            target.contractStart = startDate; target.contractEnd = endDate;
-            setCrew(updatedCrew); setAssignModal({ isOpen: false, crew: null });
-          }}
+          onConfirm={(shipId, rank, startDate, endDate, handleOverlap, addToProc) => 
+            handleAssign(shipId, rank, startDate, endDate, handleOverlap, addToProc, assignModal.crew)
+          }
         />
       )}
 
@@ -319,6 +378,17 @@ export default function App() {
             }
             setCrewFormModal({ isOpen: false, crew: null });
           }}
+        />
+      )}
+      
+      {editContractModal.isOpen && (
+        <EditContractModal
+           crewMember={editContractModal.crew}
+           onClose={() => setEditContractModal({ isOpen: false, crew: null })}
+           onConfirm={(start, end) => {
+             setCrew(prev => prev.map(c => c.id === editContractModal.crew?.id ? { ...c, contractStart: start, contractEnd: end } : c));
+             setEditContractModal({ isOpen: false, crew: null });
+           }}
         />
       )}
 
@@ -542,7 +612,7 @@ function Dashboard({ ships, crew, matrix, currentUser, today, onOpenLineup, onOp
   );
 }
 
-function LineupModal({ ship, crew, matrix, currentUser, today, getDaysBetween, onClose, onSignOff, onNotes }) {
+function LineupModal({ ship, crew, matrix, currentUser, today, getDaysBetween, onClose, onSignOff, onNotes, onEditContract }) {
   const groupedCrew = useMemo(() => {
     const groups = [];
     matrix.forEach(m => {
@@ -640,13 +710,22 @@ function LineupModal({ ship, crew, matrix, currentUser, today, getDaysBetween, o
                     const showInnerBorder = mIdx !== group.members.length - 1 && !group.matrix.checkOverlap;
                     const rowClass = showInnerBorder ? 'border-b border-slate-200' : '';
 
+                    let endPct = ((new Date(c.contractEnd).getTime() - timelineStart.getTime()) / (1000*60*60*24)) / totalDays * 100;
+                    if (endPct > 100) endPct = 100;
+                    if (endPct < 0) endPct = 0;
+
                     return (
                       <div key={c.id} className={`flex items-stretch text-xs bg-white relative group h-6 ${rowClass}`}>
                         <div className="w-[30%] md:w-[25%] shrink-0 px-2 border-r border-slate-200 flex items-center min-w-0">
                           <span className="font-bold text-blue-600 w-16 shrink-0 truncate mr-1" title={c.rank}>{c.rank}</span>
                           <span className="font-bold text-slate-800 truncate mr-1" title={c.name}>{c.name}</span>
-                          <button onClick={() => onNotes(c.id, c.name)} className="text-slate-300 hover:text-slate-500 shrink-0"><MessageCircle size={12}/></button>
-                          {c.notes?.length > 0 && <span className="text-[9px] text-red-500 font-bold ml-1">{c.notes.length}</span>}
+                          <div className="flex items-center gap-1 shrink-0 ml-auto">
+                              <button onClick={() => onNotes(c.id, c.name)} className="text-slate-300 hover:text-slate-500" title="Notes"><MessageCircle size={14}/></button>
+                              {c.notes?.length > 0 && <span className="text-[9px] text-red-500 font-bold">{c.notes.length}</span>}
+                              {currentUser.role !== 'viewer' && (
+                                 <button onClick={() => onSignOff(c)} className="text-slate-300 hover:text-red-500 ml-1" title="Sign-off"><LogOut size={14}/></button>
+                              )}
+                          </div>
                         </div>
                         
                         <div className="w-[70%] md:w-[75%] relative h-6 bg-slate-50/30">
@@ -659,18 +738,18 @@ function LineupModal({ ship, crew, matrix, currentUser, today, getDaysBetween, o
                              {isPlanned && <span className="text-[9px] font-bold text-green-600 bg-white px-1 rounded">PLANNED</span>}
                           </div>
 
-                          {isExpired && (
-                             <div className="absolute z-10 text-[9px] font-bold text-red-500 flex items-center gap-0.5 whitespace-nowrap" style={{left: `${((new Date(c.contractEnd).getTime() - timelineStart.getTime())/(1000*60*60*24))/totalDays*100 + 1}%`, top: '4px'}}>
-                               <AlertTriangle size={10}/> Expired
+                          {currentUser.role !== 'viewer' && (
+                             <div className="absolute z-20 flex items-center opacity-0 group-hover:opacity-100 transition-opacity" style={{left: `${endPct}%`, top: '2px'}}>
+                               <button onClick={() => onEditContract(c)} className="bg-white border border-slate-200 text-slate-400 hover:text-blue-500 p-0.5 rounded-full shadow-sm translate-x-1" title="Extend / Edit Contract">
+                                 <ChevronRight size={14}/>
+                               </button>
                              </div>
                           )}
-                          
-                          {currentUser.role !== 'viewer' && !isExpired && (
-                            <div className="absolute right-1 top-0 bottom-0 flex items-center opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                              <button onClick={() => onSignOff(c)} className="bg-white border border-slate-200 text-slate-400 hover:text-red-500 p-0.5 rounded shadow-sm" title="Sign-off / Edit">
-                                <ChevronRight size={14}/>
-                              </button>
-                            </div>
+
+                          {isExpired && (
+                             <div className="absolute z-10 text-[9px] font-bold text-red-500 flex items-center gap-0.5 whitespace-nowrap" style={{left: `${((new Date(c.contractEnd).getTime() - timelineStart.getTime())/(1000*60*60*24))/totalDays*100 + 3}%`, top: '4px'}}>
+                               <AlertTriangle size={10}/> Expired
+                             </div>
                           )}
                         </div>
                       </div>
@@ -686,8 +765,176 @@ function LineupModal({ ship, crew, matrix, currentUser, today, getDaysBetween, o
   );
 }
 
-function Procedures({ procedures, schema, currentUser, onUpdateProc, onUpdateDynamic, onAddEval, onAddDebrief }) {
+function AssignModal({ crewMember, ships, matrix, onboardCrew, today, onClose, onConfirm }) {
+  const [shipId, setShipId] = useState('');
+  const [rank, setRank] = useState(crewMember?.rank !== 'TBA' ? crewMember?.rank : '');
+  const [start, setStart] = useState('');
+  const [end, setEnd] = useState('');
+  const [overlapAction, setOverlapAction] = useState('plan');
+  const [addToProc, setAddToProc] = useState(true);
+
+  if (!crewMember) return null;
+
+  const selectedMatrix = matrix.find(m => m.rank === rank);
+  const existingCrew = onboardCrew.find(c => c.shipId === shipId && c.rank === rank);
+  const hasOverlapWarning = shipId && rank && selectedMatrix?.checkOverlap && existingCrew;
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <div className="flex justify-between items-center mb-4">
+           <h2 className="text-xl font-bold text-slate-800">Assign to Vessel</h2>
+           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+        </div>
+
+        <div className="mb-4 bg-slate-50 p-3 rounded border border-slate-200 flex items-center gap-3">
+          <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold text-lg shrink-0">{crewMember?.name.charAt(0)}</div>
+          <div className="min-w-0">
+            <div className="font-bold text-slate-800 truncate">{crewMember?.name}</div>
+            <div className="text-xs text-slate-500 truncate">{crewMember?.competency}</div>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Select Vessel</label>
+            <select className="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white focus:outline-none focus:border-blue-500" value={shipId} onChange={e=>setShipId(e.target.value)}>
+              <option value="">-- Choose Vessel --</option>
+              {ships.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Rank on Board</label>
+            <select className="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white focus:outline-none focus:border-blue-500" value={rank} onChange={e=>setRank(e.target.value)}>
+              <option value="">-- Choose Rank --</option>
+              {matrix.map(m => <option key={m.id} value={m.rank}>{m.rank}</option>)}
+            </select>
+          </div>
+          
+          {hasOverlapWarning && (
+             <div className="bg-amber-50 border border-amber-200 rounded p-3 text-sm">
+                <div className="font-bold text-amber-800 flex items-center gap-1 mb-2"><AlertTriangle size={16}/> Overlap Warning</div>
+                <p className="text-amber-700 mb-3">{existingCrew.name} is currently assigned as {rank} on this vessel.</p>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="overlap" value="relieve" checked={overlapAction==='relieve'} onChange={()=>setOverlapAction('relieve')} className="text-blue-600"/>
+                    <span className="text-slate-700">Relieve Immediately (Sign-off {existingCrew.name})</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="overlap" value="plan" checked={overlapAction==='plan'} onChange={()=>setOverlapAction('plan')} className="text-blue-600"/>
+                    <span className="text-slate-700">Plan as Relief / Handover (Overlap on Gantt)</span>
+                  </label>
+                </div>
+             </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Join Date</label>
+              <input type="date" className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:outline-none focus:border-blue-500" value={start} onChange={e=>setStart(e.target.value)}/>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">End Date</label>
+              <input type="date" className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:outline-none focus:border-blue-500" value={end} onChange={e=>setEnd(e.target.value)}/>
+            </div>
+          </div>
+          
+          <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer pt-2 border-t border-slate-100">
+            <input type="checkbox" checked={addToProc} onChange={e=>setAddToProc(e.target.checked)} className="rounded border-slate-300 text-blue-600 w-4 h-4 cursor-pointer"/>
+            Add to Procedures Follow Up (Onsigner)
+          </label>
+        </div>
+
+        <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-slate-100">
+          <button onClick={onClose} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-sm">Cancel</button>
+          <button 
+            disabled={!shipId || !rank || !start || !end}
+            onClick={() => onConfirm(shipId, rank, start, end, hasOverlapWarning ? overlapAction : null, addToProc)} 
+            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm disabled:opacity-50 transition-colors shadow-sm"
+          >
+            Assign Crew
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SignOffModal({ crewMember, today, onClose, onConfirm }) {
+  const [date, setDate] = useState(today.toISOString().split('T')[0]);
+  const [addToProc, setAddToProc] = useState(true);
+
+  if (!crewMember) return null;
+  
+  const isEarly = new Date(date).getTime() < new Date(crewMember.contractEnd).getTime();
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+        <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2"><LogOut className="text-red-500"/> Sign Off</h2>
+        <p className="text-slate-600 mb-4 text-sm">You are about to sign off <strong>{crewMember?.name}</strong> from their <strong>{crewMember?.rank}</strong> position.</p>
+        
+        {isEarly && (
+          <div className="bg-amber-50 text-amber-700 p-2 text-xs font-medium rounded border border-amber-200 mb-4 flex gap-2">
+            <AlertTriangle size={16} className="shrink-0 mt-0.5"/> This is before their planned contract end date ({crewMember?.contractEnd}).
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Sign Off Date</label>
+            <input type="date" className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:outline-none focus:border-red-500" value={date} onChange={e=>setDate(e.target.value)}/>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+            <input type="checkbox" checked={addToProc} onChange={e=>setAddToProc(e.target.checked)} className="rounded border-slate-300 text-red-600 w-4 h-4 cursor-pointer"/>
+            Add to Procedures Follow Up
+          </label>
+        </div>
+
+        <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-slate-100">
+          <button onClick={onClose} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-sm">Cancel</button>
+          <button onClick={() => onConfirm(date, addToProc)} className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-sm shadow-sm transition-colors">Confirm Sign-Off</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditContractModal({ crewMember, onClose, onConfirm }) {
+  const [start, setStart] = useState(crewMember?.contractStart || '');
+  const [end, setEnd] = useState(crewMember?.contractEnd || '');
+
+  if (!crewMember) return null;
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[70] p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+        <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">Edit Contract Dates</h2>
+        <p className="text-sm text-slate-500 mb-4">Update contract dates for <strong>{crewMember?.name}</strong>.</p>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Start Date</label>
+            <input type="date" className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:outline-none focus:border-blue-500" value={start} onChange={e=>setStart(e.target.value)}/>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">End Date</label>
+            <input type="date" className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:outline-none focus:border-blue-500" value={end} onChange={e=>setEnd(e.target.value)}/>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-slate-100">
+          <button onClick={onClose} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-sm">Cancel</button>
+          <button disabled={!start || !end} onClick={() => onConfirm(start, end)} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm shadow-sm transition-colors disabled:opacity-50">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Procedures({ procedures, schema, currentUser, onUpdateProc, onUpdateDynamic, onAddEval, onAddDebrief, onDeleteProc }) {
   const [tab, setTab] = useState('active'); 
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   
   const [typeFilter, setTypeFilter] = useState('');
   const [crewSearch, setCrewSearch] = useState('');
@@ -811,6 +1058,9 @@ function Procedures({ procedures, schema, currentUser, onUpdateProc, onUpdateDyn
                           </>
                         )}
                         <button onClick={() => onUpdateProc(p.id, 'status', 'archive')} title="Archive" className="text-slate-400 hover:text-slate-700 ml-2 transition-colors"><Archive size={18}/></button>
+                        {currentUser.role === 'admin' && (
+                          <button onClick={() => setDeleteConfirmId(p.id)} title="Delete Procedure" className="text-slate-300 hover:text-red-500 ml-1 transition-colors"><Trash2 size={18}/></button>
+                        )}
                       </div>
                     ) : (
                       <div className="flex justify-end items-center">
@@ -828,6 +1078,15 @@ function Procedures({ procedures, schema, currentUser, onUpdateProc, onUpdateDyn
           </table>
         </div>
       </div>
+      
+      {deleteConfirmId && (
+        <DeleteConfirmModal 
+          message="Are you sure you want to permanently delete this procedure record?" 
+          showConfirm={true} 
+          onClose={() => setDeleteConfirmId(null)} 
+          onConfirm={() => { onDeleteProc(deleteConfirmId); setDeleteConfirmId(null); }} 
+        />
+      )}
     </div>
   );
 }
@@ -838,6 +1097,8 @@ function EvaluationsOverview({ evals, ships, matrix, currentUser, onDelete }) {
   const [fVessel, setFVessel] = useState('');
   const [fDate, setFDate] = useState('');
   const [fEvalBy, setFEvalBy] = useState('');
+  
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
   const displayEvals = evals.filter(e => {
     if(fRank && e.rank !== fRank) return false;
@@ -890,7 +1151,7 @@ function EvaluationsOverview({ evals, ships, matrix, currentUser, onDelete }) {
         <div className="overflow-x-auto flex-1">
           <table className="w-full text-sm text-left whitespace-nowrap">
             <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200 sticky top-0">
-              <tr><th className="px-4 py-3 font-semibold">Date</th><th className="px-4 py-3 font-semibold">Crew Name</th><th className="px-4 py-3 font-semibold">Rank</th><th className="px-4 py-3 font-semibold">Vessel</th><th className="px-4 py-3 font-semibold">Score</th><th className="px-4 py-3 font-semibold">Evaluator</th>{currentUser.role === 'admin' && <th className="px-4 py-3 font-semibold text-right">Undo</th>}</tr>
+              <tr><th className="px-4 py-3 font-semibold">Date</th><th className="px-4 py-3 font-semibold">Crew Name</th><th className="px-4 py-3 font-semibold">Rank</th><th className="px-4 py-3 font-semibold">Vessel</th><th className="px-4 py-3 font-semibold">Score</th><th className="px-4 py-3 font-semibold">Evaluator</th><th className="px-4 py-3 font-semibold text-right">Actions</th></tr>
             </thead>
             <tbody>
               {displayEvals.map(e => {
@@ -903,11 +1164,11 @@ function EvaluationsOverview({ evals, ships, matrix, currentUser, onDelete }) {
                     <td className="px-4 py-3 text-slate-600">{e.shipName}</td>
                     <td className={`px-4 py-3 ${isLowScore ? 'text-red-600 font-bold' : 'font-bold text-slate-800'}`}>{e.score}/100</td>
                     <td className="px-4 py-3 text-slate-600">{e.evaluatedBy}</td>
-                    {currentUser.role === 'admin' && (
-                       <td className="px-4 py-3 text-right">
-                         <button onClick={()=>onDelete(e.id)} className="text-slate-300 hover:text-red-500" title="Delete Evaluation"><Trash2 size={16}/></button>
-                       </td>
-                    )}
+                    <td className="px-4 py-3 text-right">
+                       {currentUser.role === 'admin' && (
+                          <button onClick={() => setDeleteConfirmId(e.id)} className="text-slate-300 hover:text-red-500" title="Delete Evaluation"><Trash2 size={16}/></button>
+                       )}
+                    </td>
                   </tr>
                 );
               })}
@@ -916,23 +1177,32 @@ function EvaluationsOverview({ evals, ships, matrix, currentUser, onDelete }) {
           </table>
         </div>
       </div>
+      
+      {deleteConfirmId && (
+        <DeleteConfirmModal 
+          message="Are you sure you want to permanently delete this evaluation record?" 
+          showConfirm={true} 
+          onClose={() => setDeleteConfirmId(null)} 
+          onConfirm={() => { onDelete(deleteConfirmId); setDeleteConfirmId(null); }} 
+        />
+      )}
     </div>
   );
 }
 
-function EvaluationsAdd({ currentUser, crew, ships, prefillData, onAdd, onClearPrefill }) {
+function EvaluationsAdd({ currentUser, crew, ships, prefillData, today, onAdd, onClearPrefill }) {
   const generateInitialRows = () => {
-    if (!prefillData) return [{ id: 1, crewName: '', rank: '', shipName: '', score: '', evaluatedBy: currentUser.username }];
+    if (!prefillData) return [{ id: 1, crewName: '', rank: '', shipName: '', score: '', evaluatedBy: currentUser.username, date: today.toISOString().split('T')[0] }];
     
     const isManager = ['Master', 'Chief Engineer'].includes(prefillData.rank);
     if (!isManager) {
       const evaluator = typeof prefillData.evalSnapshot === 'string' ? prefillData.evalSnapshot : 'Office';
-      return [{ id: 1, crewName: prefillData.crewName, rank: prefillData.rank, shipName: prefillData.shipName, score: '', evaluatedBy: evaluator }];
+      return [{ id: 1, crewName: prefillData.crewName, rank: prefillData.rank, shipName: prefillData.shipName, score: '', evaluatedBy: evaluator, date: prefillData.date }];
     } else {
       const crewList = Array.isArray(prefillData.evalSnapshot) ? prefillData.evalSnapshot : [];
-      if (crewList.length === 0) return [{ id: 1, crewName: '', rank: '', shipName: prefillData.shipName, score: '', evaluatedBy: prefillData.crewName }];
+      if (crewList.length === 0) return [{ id: 1, crewName: '', rank: '', shipName: prefillData.shipName, score: '', evaluatedBy: prefillData.crewName, date: prefillData.date }];
       return crewList.map((c, i) => ({
-        id: i+1, crewName: c.name, rank: c.rank, shipName: prefillData.shipName, score: '', evaluatedBy: prefillData.crewName
+        id: i+1, crewName: c.name, rank: c.rank, shipName: prefillData.shipName, score: '', evaluatedBy: prefillData.crewName, date: prefillData.date
       }));
     }
   };
@@ -940,10 +1210,10 @@ function EvaluationsAdd({ currentUser, crew, ships, prefillData, onAdd, onClearP
   const [addRows, setAddRows] = useState(generateInitialRows());
   useEffect(() => setAddRows(generateInitialRows()), [prefillData]);
 
-  const handleAddRow = () => setAddRows([...addRows, { id: Date.now(), crewName: '', rank: '', shipName: '', score: '', evaluatedBy: currentUser.username }]);
+  const handleAddRow = () => setAddRows([...addRows, { id: Date.now(), crewName: '', rank: '', shipName: '', score: '', evaluatedBy: currentUser.username, date: today.toISOString().split('T')[0] }]);
   const updateRow = (id, field, val) => setAddRows(addRows.map(r => r.id === id ? {...r, [field]: val} : r));
   const submitAll = () => {
-    const validRows = addRows.filter(r => r.crewName && r.score).map(r => ({...r, date: new Date().toISOString().split('T')[0], id: 'e'+generateId()}));
+    const validRows = addRows.filter(r => r.crewName && r.score).map(r => ({...r, id: 'e'+generateId()}));
     if(validRows.length > 0) onAdd(validRows);
   };
 
@@ -967,10 +1237,11 @@ function EvaluationsAdd({ currentUser, crew, ships, prefillData, onAdd, onClearP
         )}
         
         <div className="overflow-x-auto">
-          <div className="min-w-[800px] space-y-3">
+          <div className="min-w-[900px] space-y-3">
             {addRows.map((row, i) => (
               <div key={row.id} className="flex gap-3 items-center bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
                 <span className="font-bold text-slate-400 w-6 text-center">{i+1}.</span>
+                <input type="date" className="border border-slate-300 rounded-md p-2 text-sm w-36 focus:border-blue-500 focus:outline-none bg-slate-50" value={row.date} onChange={e=>updateRow(row.id, 'date', e.target.value)}/>
                 <input type="text" placeholder="Crew Name" className="border border-slate-300 rounded-md p-2 text-sm flex-1 focus:border-blue-500 focus:outline-none bg-slate-50" value={row.crewName} onChange={e=>updateRow(row.id, 'crewName', e.target.value)} list="crewList"/>
                 <input type="text" placeholder="Rank" className="border border-slate-300 rounded-md p-2 text-sm w-32 focus:border-blue-500 focus:outline-none bg-slate-50" value={row.rank} onChange={e=>updateRow(row.id, 'rank', e.target.value)}/>
                 <select className="border border-slate-300 rounded-md p-2 text-sm w-40 bg-white focus:border-blue-500 focus:outline-none" value={row.shipName} onChange={e=>updateRow(row.id, 'shipName', e.target.value)}>
@@ -995,9 +1266,10 @@ function EvaluationsAdd({ currentUser, crew, ships, prefillData, onAdd, onClearP
   );
 }
 
-function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept }) {
+function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelete }) {
   const [tab, setTab] = useState('active');
-  const [editModal, setEditModal] = useState(null); // stores the debrief object to edit
+  const [editModal, setEditModal] = useState(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
   const [fRank, setFRank] = useState('');
   const [fName, setFName] = useState('');
@@ -1024,7 +1296,6 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept }) {
         <span className={isLow ? 'text-red-600 font-bold' : 'font-bold text-slate-700'}>{dept.score}</span>
         {dept.note && (
           <div className="relative">
-             {/* Native title attribute tooltip for robust hover text without clipping */}
              <button className="text-blue-500 cursor-help opacity-70 hover:opacity-100 focus:outline-none" title={dept.note}>
                 <Info size={14} />
              </button>
@@ -1115,9 +1386,12 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept }) {
                     
                     <td className="px-4 py-3 text-right">
                       {tab === 'active' && currentUser.role !== 'viewer' ? (
-                        <div className="flex justify-end gap-2">
+                        <div className="flex justify-end items-center gap-2">
                            <button onClick={() => setEditModal(d)} className="text-blue-600 hover:bg-blue-50 px-2 py-1 rounded border border-blue-200 font-medium text-xs">Edit / Fill</button>
                            <button onClick={() => onUpdate(d.id, 'status', 'archived')} className="text-emerald-600 hover:bg-emerald-50 px-2 py-1 rounded border border-emerald-200 font-medium text-xs">Complete</button>
+                           {currentUser.role === 'admin' && (
+                             <button onClick={() => setDeleteConfirmId(d.id)} className="text-slate-400 hover:text-red-500 p-1" title="Delete"><Trash2 size={16}/></button>
+                           )}
                         </div>
                       ) : (
                         <div className="flex justify-end items-center">
@@ -1136,6 +1410,15 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept }) {
           </table>
         </div>
       </div>
+      
+      {deleteConfirmId && (
+        <DeleteConfirmModal 
+          message="Are you sure you want to permanently delete this debriefing record?" 
+          showConfirm={true} 
+          onClose={() => setDeleteConfirmId(null)} 
+          onConfirm={() => { onDelete(deleteConfirmId); setDeleteConfirmId(null); }} 
+        />
+      )}
 
       {/* Edit Modal for Debriefing */}
       {editModal && (
@@ -1639,134 +1922,6 @@ function NotesModal({ isOpen, name, notes, currentUser, onClose, onAdd, onDelete
             <button disabled={!text} onClick={() => { onAdd(text); setText(''); }} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors">Add</button>
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-// --- MISSING MODALS RESTORED --- //
-
-function AssignModal({ crewMember, ships, matrix, onboardCrew, today, onClose, onConfirm }) {
-  const [shipId, setShipId] = useState('');
-  const [rank, setRank] = useState(crewMember?.rank !== 'TBA' ? crewMember?.rank : '');
-  const [start, setStart] = useState('');
-  const [end, setEnd] = useState('');
-  
-  const selectedMatrix = matrix.find(m => m.rank === rank);
-  const existingCrew = onboardCrew.find(c => c.shipId === shipId && c.rank === rank);
-  const hasOverlapWarning = shipId && rank && selectedMatrix?.checkOverlap && existingCrew;
-
-  const [overlapAction, setOverlapAction] = useState('plan');
-
-  return (
-    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-        <div className="flex justify-between items-center mb-4">
-           <h2 className="text-xl font-bold text-slate-800">Assign to Vessel</h2>
-           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
-        </div>
-
-        <div className="mb-4 bg-slate-50 p-3 rounded border border-slate-200 flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold text-lg shrink-0">{crewMember?.name.charAt(0)}</div>
-          <div className="min-w-0">
-            <div className="font-bold text-slate-800 truncate">{crewMember?.name}</div>
-            <div className="text-xs text-slate-500 truncate">{crewMember?.competency}</div>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Select Vessel</label>
-            <select className="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white focus:outline-none focus:border-blue-500" value={shipId} onChange={e=>setShipId(e.target.value)}>
-              <option value="">-- Choose Vessel --</option>
-              {ships.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Rank on Board</label>
-            <select className="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white focus:outline-none focus:border-blue-500" value={rank} onChange={e=>setRank(e.target.value)}>
-              <option value="">-- Choose Rank --</option>
-              {matrix.map(m => <option key={m.id} value={m.rank}>{m.rank}</option>)}
-            </select>
-          </div>
-          
-          {hasOverlapWarning && (
-             <div className="bg-amber-50 border border-amber-200 rounded p-3 text-sm">
-                <div className="font-bold text-amber-800 flex items-center gap-1 mb-2"><AlertTriangle size={16}/> Overlap Warning</div>
-                <p className="text-amber-700 mb-3">{existingCrew.name} is currently assigned as {rank} on this vessel.</p>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="overlap" value="relieve" checked={overlapAction==='relieve'} onChange={()=>setOverlapAction('relieve')} className="text-blue-600"/>
-                    <span className="text-slate-700">Relieve Immediately (Sign-off {existingCrew.name})</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="overlap" value="plan" checked={overlapAction==='plan'} onChange={()=>setOverlapAction('plan')} className="text-blue-600"/>
-                    <span className="text-slate-700">Plan as Relief / Handover (Overlap on Gantt)</span>
-                  </label>
-                </div>
-             </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Join Date</label>
-              <input type="date" className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:outline-none focus:border-blue-500" value={start} onChange={e=>setStart(e.target.value)}/>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">End Date</label>
-              <input type="date" className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:outline-none focus:border-blue-500" value={end} onChange={e=>setEnd(e.target.value)}/>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-slate-100">
-          <button onClick={onClose} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-sm">Cancel</button>
-          <button 
-            disabled={!shipId || !rank || !start || !end}
-            onClick={() => onConfirm(shipId, rank, start, end, hasOverlapWarning ? overlapAction : null)} 
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm disabled:opacity-50 transition-colors shadow-sm"
-          >
-            Assign Crew
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SignOffModal({ crewMember, today, onClose, onConfirm }) {
-  const [date, setDate] = useState(today.toISOString().split('T')[0]);
-  const [addToProc, setAddToProc] = useState(true);
-  
-  const isEarly = new Date(date).getTime() < new Date(crewMember?.contractEnd).getTime();
-
-  return (
-    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
-        <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2"><LogOut className="text-red-500"/> Sign Off</h2>
-        <p className="text-slate-600 mb-4 text-sm">You are about to sign off <strong>{crewMember?.name}</strong> from their <strong>{crewMember?.rank}</strong> position.</p>
-        
-        {isEarly && (
-          <div className="bg-amber-50 text-amber-700 p-2 text-xs font-medium rounded border border-amber-200 mb-4 flex gap-2">
-            <AlertTriangle size={16} className="shrink-0 mt-0.5"/> This is before their planned contract end date ({crewMember?.contractEnd}).
-          </div>
-        )}
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Sign Off Date</label>
-            <input type="date" className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:outline-none focus:border-red-500" value={date} onChange={e=>setDate(e.target.value)}/>
-          </div>
-          <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-            <input type="checkbox" checked={addToProc} onChange={e=>setAddToProc(e.target.checked)} className="rounded border-slate-300 text-red-600 w-4 h-4 cursor-pointer"/>
-            Add to Procedures Follow Up
-          </label>
-        </div>
-
-        <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-slate-100">
-          <button onClick={onClose} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-sm">Cancel</button>
-          <button onClick={() => onConfirm(date, addToProc)} className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-sm shadow-sm transition-colors">Confirm Sign-Off</button>
-        </div>
       </div>
     </div>
   );
