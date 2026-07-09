@@ -12,16 +12,13 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 
-// --- FIREBASE CONFIGURATION ---
-// Kendi Firebase Config bilgilerinizi buraya yapıştırın.
-// Canvas ortamında otomatik çalışması için bir fallback mekanizması eklendi.
-const customFirebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+const firebaseConfig = {
+  apiKey: "AIzaSyBodyi-nGpL7TExhyxJQkL5boZxVzB-NKs",
+  authDomain: "crew-change-follow-up.firebaseapp.com",
+  projectId: "crew-change-follow-up",
+  storageBucket: "crew-change-follow-up.firebasestorage.app",
+  messagingSenderId: "224379023927",
+  appId: "1:224379023927:web:4e6b7cd7dc87519b0685b2"
 };
 
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : customFirebaseConfig;
