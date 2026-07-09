@@ -19,7 +19,7 @@ const customFirebaseConfig = {
   projectId: "crew-change-follow-up",
   storageBucket: "crew-change-follow-up.firebasestorage.app",
   messagingSenderId: "224379023927",
-  appId: "1:224379023927:web:4e6b7cd7dc87519b0685b2"
+  appId: "1:224379023927:web:18e01ebd6184c8230685b2"
 };
 
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : customFirebaseConfig;
