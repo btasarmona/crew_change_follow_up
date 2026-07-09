@@ -16,12 +16,12 @@ import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc
 // Kendi Firebase Config bilgilerinizi buraya yapıştırın.
 // Canvas ortamında otomatik çalışması için bir fallback mekanizması eklendi.
 const customFirebaseConfig = {
-  apiKey: "AIzaSyBodyi-nGpL7TExhyxJQkL5boZxVzB-NKs",
-  authDomain: "crew-change-follow-up.firebaseapp.com",
-  projectId: "crew-change-follow-up",
-  storageBucket: "crew-change-follow-up.firebasestorage.app",
-  messagingSenderId: "224379023927",
-  appId: "1:224379023927:web:2cf546031aabb76d0685b2"
+  apiKey: "AIzaSyDob7zaTPNIDBgoMH9WBiEBSBp91atzJDA",
+  authDomain: "armona-crew-manager.firebaseapp.com",
+  projectId: "armona-crew-manager",
+  storageBucket: "armona-crew-manager.firebasestorage.app",
+  messagingSenderId: "916422821733",
+  appId: "1:916422821733:web:ffeef86ed539928cca838c"
 };
 
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : customFirebaseConfig;
