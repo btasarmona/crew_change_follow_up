@@ -12,7 +12,8 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 
-const firebaseConfig = {
+
+const customFirebaseConfig = {
   apiKey: "AIzaSyBodyi-nGpL7TExhyxJQkL5boZxVzB-NKs",
   authDomain: "crew-change-follow-up.firebaseapp.com",
   projectId: "crew-change-follow-up",
