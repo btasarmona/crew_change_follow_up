@@ -4,7 +4,7 @@ import {
   Users, Ship, LayoutDashboard, FileCheck, Star, Settings, 
   MessageCircle, AlertTriangle, Calendar, Plus, X, Search, 
   ChevronRight, ChevronDown, ChevronUp, UserCheck, 
-  Archive, Edit2, LogOut, UserPlus, Trash2, Filter, Info, RotateCcw
+  Archive, Edit2, LogOut, UserPlus, Trash2, Filter, Info, RotateCcw, Download
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -285,6 +285,35 @@ export default function App() {
     }
   };
 
+  // Export to Excel Helper
+  const exportToCSV = (data, filename) => {
+    if(data.length === 0) return;
+    const separator = ',';
+    const keys = Object.keys(data[0]);
+    
+    const csvContent = [
+      keys.join(separator),
+      ...data.map(row => {
+        return keys.map(k => {
+          let cell = row[k] === null || row[k] === undefined ? '' : row[k];
+          cell = String(cell).replace(/"/g, '""');
+          if (cell.search(/("|,|\n)/g) >= 0) { cell = `"${cell}"`; }
+          return cell;
+        }).join(separator);
+      })
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${filename}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // --- LOGIN & LOADING CHECK ---
   if (isDbLoading && fbUser) {
     return <div className="flex h-screen items-center justify-center bg-[#0f172a] text-white">Loading database...</div>;
@@ -367,6 +396,7 @@ export default function App() {
              <EvaluationsOverview 
                evals={evaluations} ships={ships} matrix={matrix} currentUser={currentUser}
                onDelete={async (id) => await deleteDoc(doc(db, getPath('evaluations'), id))}
+               exportToCSV={exportToCSV}
              />
           )}
           {activeTab === 'eval_add' && currentUser.role !== 'viewer' && (
@@ -381,7 +411,7 @@ export default function App() {
           )}
           {activeTab === 'debriefings' && (
              <Debriefings 
-               debriefings={debriefings} currentUser={currentUser}
+               debriefings={debriefings} currentUser={currentUser} exportToCSV={exportToCSV}
                onUpdate={async (id, field, val) => await updateDoc(doc(db, getPath('debriefings'), id), { [field]: val })}
                onDelete={async (id) => await deleteDoc(doc(db, getPath('debriefings'), id))}
                onUpdateDept={async (id, index, field, val) => {
@@ -1177,7 +1207,7 @@ function Procedures({ procedures, schema, currentUser, onUpdateProc, onUpdateDyn
   );
 }
 
-function EvaluationsOverview({ evals, ships, matrix, currentUser, onDelete }) {
+function EvaluationsOverview({ evals, ships, matrix, currentUser, onDelete, exportToCSV }) {
   const [fRank, setFRank] = useState('');
   const [fName, setFName] = useState('');
   const [fVessel, setFVessel] = useState('');
@@ -1197,7 +1227,15 @@ function EvaluationsOverview({ evals, ships, matrix, currentUser, onDelete }) {
 
   return (
     <div className="space-y-4 flex flex-col h-full">
-      <h1 className="text-2xl font-bold text-slate-800 shrink-0">Evaluations Overview</h1>
+      <div className="flex justify-between items-end shrink-0">
+        <h1 className="text-2xl font-bold text-slate-800">Evaluations Overview</h1>
+        <button 
+          onClick={() => exportToCSV(displayEvals.map(e => ({ Date: e.date, 'Crew Name': e.crewName, Rank: e.rank, Vessel: e.shipName, Score: e.score, 'Evaluated By': e.evaluatedBy })), 'evaluations_export')} 
+          className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-md font-bold text-sm shadow-sm transition-colors flex items-center gap-2"
+        >
+          <Download size={16}/> Export to Excel
+        </button>
+      </div>
       
       {/* Filters */}
       <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-wrap gap-3 items-end shrink-0">
@@ -1352,7 +1390,7 @@ function EvaluationsAdd({ currentUser, crew, ships, prefillData, today, onAdd, o
   );
 }
 
-function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelete }) {
+function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelete, exportToCSV }) {
   const [tab, setTab] = useState('active');
   const [editModal, setEditModal] = useState(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
@@ -1395,9 +1433,35 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelet
     <div className="space-y-4 h-full flex flex-col">
       <div className="flex justify-between items-end shrink-0">
         <h1 className="text-2xl font-bold text-slate-800">Senior Officer Debriefings</h1>
-        <div className="bg-slate-200 p-1 rounded-md flex text-sm font-medium shrink-0 shadow-sm">
-          <button onClick={() => setTab('active')} className={`px-4 py-1 rounded transition-colors ${tab==='active'?'bg-white shadow text-slate-800':'text-slate-500 hover:text-slate-700'}`}>Active</button>
-          <button onClick={() => setTab('archived')} className={`px-4 py-1 rounded transition-colors ${tab==='archived'?'bg-white shadow text-slate-800':'text-slate-500 hover:text-slate-700'}`}>Archived</button>
+        <div className="flex items-center gap-3">
+          {tab === 'archived' && (
+            <button 
+              onClick={() => {
+                const exportData = displayData.map(d => ({
+                  'Sign-off Date': d.signOffDate,
+                  'Crew Name': d.crewName,
+                  'Rank': d.rank,
+                  'Vessel': d.shipName,
+                  'Deck Score': d.depts[0]?.score || '',
+                  'Deck Note': d.depts[0]?.note || '',
+                  'Engine Score': d.depts[1]?.score || '',
+                  'Engine Note': d.depts[1]?.note || '',
+                  'Safety Score': d.depts[2]?.score || '',
+                  'Safety Note': d.depts[2]?.note || '',
+                  'HR Score': d.depts[3]?.score || '',
+                  'HR Note': d.depts[3]?.note || ''
+                }));
+                exportToCSV(exportData, 'debriefings_archive_export');
+              }} 
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md font-bold text-sm shadow-sm transition-colors flex items-center gap-2"
+            >
+              <Download size={14}/> Export Archive
+            </button>
+          )}
+          <div className="bg-slate-200 p-1 rounded-md flex text-sm font-medium shrink-0 shadow-sm">
+            <button onClick={() => setTab('active')} className={`px-4 py-1 rounded transition-colors ${tab==='active'?'bg-white shadow text-slate-800':'text-slate-500 hover:text-slate-700'}`}>Active</button>
+            <button onClick={() => setTab('archived')} className={`px-4 py-1 rounded transition-colors ${tab==='archived'?'bg-white shadow text-slate-800':'text-slate-500 hover:text-slate-700'}`}>Archived</button>
+          </div>
         </div>
       </div>
 
@@ -1828,7 +1892,7 @@ function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, users, onA
                     <input type="checkbox" checked={m.checkOverlap} onChange={e => { const nm=[...matrix]; nm[i].checkOverlap=e.target.checked; setMatrix(nm); }} className="rounded border-slate-300 w-4 h-4 cursor-pointer" />
                   </td>
                   <td className="p-3 flex gap-1.5 flex-wrap items-center">
-                    {(m.competencies || []).map((c, j) => (
+                    {m.competencies.map((c, j) => (
                       <span key={j} className="bg-slate-200 text-slate-700 text-[11px] font-bold px-2 py-1 rounded border border-slate-300 flex items-center gap-1">
                         {c} <button onClick={()=>removeCompetency(i,j)} className="hover:text-red-500"><X size={10}/></button>
                       </span>
@@ -1902,7 +1966,7 @@ function CrewFormModal({ matrix, crewMember, onClose, onConfirm }) {
 
   const allComps = useMemo(() => {
     const set = new Set();
-    (matrix || []).forEach(m => (m.competencies || []).forEach(c => set.add(c)));
+    matrix.forEach(m => m.competencies.forEach(c => set.add(c)));
     return Array.from(set);
   }, [matrix]);
 
