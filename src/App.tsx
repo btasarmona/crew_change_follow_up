@@ -412,6 +412,15 @@ export default function App() {
           {activeTab === 'debriefings' && (
              <Debriefings 
                debriefings={debriefings} currentUser={currentUser} exportToCSV={exportToCSV}
+               ships={ships} matrix={matrix}
+               onManualAdd={async (data) => {
+                 const newDebrief = { 
+                   crewName: data.crewName, shipName: data.shipName, rank: data.rank, 
+                   signOffDate: data.signOffDate, startDate: '', endDate: '', status: 'active', 
+                   depts: [{name:'Deck', note:'', score:''},{name:'Engine', note:'', score:''},{name:'Safety', note:'', score:''},{name:'HR', note:'', score:''}] 
+                 };
+                 await setDoc(doc(db, getPath('debriefings'), generateId()), newDebrief);
+               }}
                onUpdate={async (id, field, val) => await updateDoc(doc(db, getPath('debriefings'), id), { [field]: val })}
                onDelete={async (id) => await deleteDoc(doc(db, getPath('debriefings'), id))}
                onUpdateDept={async (id, index, field, val) => {
@@ -1161,7 +1170,7 @@ function Procedures({ procedures, schema, currentUser, onUpdateProc, onUpdateDyn
                             >
                               <Star size={18} fill={p.evaluationDone ? "currentColor" : "none"}/>
                             </button>
-                            {['Master', 'Chief Officer', 'Chief Engineer', 'Second Engineer'].includes(p.rank) && (
+                            {['master', 'chief', 'second engineer', '2nd engineer', '2/e', 'c/e', 'c/o'].some(r => (p.rank || '').toLowerCase().includes(r)) && (
                               <button 
                                 onClick={() => !p.debriefDone && onAddDebrief(p)} 
                                 disabled={p.debriefDone}
@@ -1390,10 +1399,12 @@ function EvaluationsAdd({ currentUser, crew, ships, prefillData, today, onAdd, o
   );
 }
 
-function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelete, exportToCSV }) {
+function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelete, exportToCSV, ships, matrix, onManualAdd }) {
   const [tab, setTab] = useState('active');
   const [editModal, setEditModal] = useState(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [addModal, setAddModal] = useState(false);
+  const [newDebrief, setNewDebrief] = useState({ crewName: '', rank: '', shipName: '', signOffDate: '' });
 
   const [fRank, setFRank] = useState('');
   const [fName, setFName] = useState('');
@@ -1434,6 +1445,17 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelet
       <div className="flex justify-between items-end shrink-0">
         <h1 className="text-2xl font-bold text-slate-800">Senior Officer Debriefings</h1>
         <div className="flex items-center gap-3">
+          {currentUser.role !== 'viewer' && (
+             <button 
+               onClick={() => {
+                 setNewDebrief({ crewName: '', rank: '', shipName: '', signOffDate: new Date().toISOString().split('T')[0] });
+                 setAddModal(true);
+               }} 
+               className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md font-bold text-sm shadow-sm transition-colors flex items-center gap-2"
+             >
+               <Plus size={14}/> Add Debriefing
+             </button>
+          )}
           {tab === 'archived' && (
             <button 
               onClick={() => {
@@ -1631,6 +1653,49 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelet
                   });
                   setEditModal(null);
                 }} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold shadow-sm">Save Changes</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Modal for Debriefing */}
+        {addModal && (
+          <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col">
+              <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center shrink-0">
+                 <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">Manual Add Debriefing</h2>
+                 <button onClick={()=>setAddModal(false)} className="text-slate-400 hover:text-slate-600 bg-white p-1 rounded shadow-sm border border-slate-200"><X size={18}/></button>
+              </div>
+              <div className="p-4 space-y-4">
+                 <div>
+                   <label className="block text-xs font-bold text-slate-500 mb-1">Crew Name</label>
+                   <input type="text" value={newDebrief.crewName} onChange={e=>setNewDebrief({...newDebrief, crewName: e.target.value})} className="w-full border border-slate-300 rounded p-2 text-sm outline-none focus:border-blue-500 bg-slate-50"/>
+                 </div>
+                 <div>
+                   <label className="block text-xs font-bold text-slate-500 mb-1">Rank</label>
+                   <select value={newDebrief.rank} onChange={e=>setNewDebrief({...newDebrief, rank: e.target.value})} className="w-full border border-slate-300 rounded p-2 text-sm outline-none focus:border-blue-500 bg-slate-50">
+                     <option value="">Select Rank</option>
+                     {matrix?.map(m => <option key={m.id} value={m.rank}>{m.rank}</option>)}
+                   </select>
+                 </div>
+                 <div>
+                   <label className="block text-xs font-bold text-slate-500 mb-1">Vessel</label>
+                   <select value={newDebrief.shipName} onChange={e=>setNewDebrief({...newDebrief, shipName: e.target.value})} className="w-full border border-slate-300 rounded p-2 text-sm outline-none focus:border-blue-500 bg-slate-50">
+                     <option value="">Select Vessel</option>
+                     {ships?.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                   </select>
+                 </div>
+                 <div>
+                   <label className="block text-xs font-bold text-slate-500 mb-1">Sign-off Date</label>
+                   <input type="date" value={newDebrief.signOffDate} onChange={e=>setNewDebrief({...newDebrief, signOffDate: e.target.value})} className="w-full border border-slate-300 rounded p-2 text-sm outline-none focus:border-blue-500 bg-slate-50"/>
+                 </div>
+              </div>
+              <div className="p-4 border-t border-slate-200 bg-white flex justify-end gap-2 shrink-0">
+                  <button onClick={()=>setAddModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium">Cancel</button>
+                  <button disabled={!newDebrief.crewName || !newDebrief.rank || !newDebrief.shipName || !newDebrief.signOffDate} onClick={() => {
+                    onManualAdd(newDebrief);
+                    setAddModal(false);
+                  }} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold shadow-sm disabled:opacity-50">Create</button>
               </div>
             </div>
           </div>
