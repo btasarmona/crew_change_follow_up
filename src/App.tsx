@@ -177,10 +177,6 @@ export default function App() {
     return () => { unsubShips(); unsubCrew(); unsubProcs(); unsubEvals(); unsubDebriefs(); unsubPromos(); unsubUsers(); unsubMatrix(); unsubSchema(); unsubPromoMat(); };
   }, [fbUser]);
 
-    return () => { unsubShips(); unsubCrew(); unsubProcs(); unsubEvals(); unsubDebriefs(); unsubUsers(); unsubMatrix(); unsubSchema(); };
-  }, [fbUser]);
-
-
   // --- FIREBASE ACTIONS ---
   
   const handleSeedDatabase = async () => {
