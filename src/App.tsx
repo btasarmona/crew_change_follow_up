@@ -4,8 +4,7 @@ import {
   Users, Ship, LayoutDashboard, FileCheck, Star, Settings, 
   MessageCircle, AlertTriangle, Calendar, Plus, X, Search, 
   ChevronRight, ChevronDown, ChevronUp, UserCheck, 
-  Archive, Edit2, LogOut, UserPlus, Trash2, Filter, Info, RotateCcw, Download,
-  getScoreColor, Briefcase
+  Archive, Edit2, LogOut, UserPlus, Trash2, Filter, Info, RotateCcw, Download, Briefcase
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
