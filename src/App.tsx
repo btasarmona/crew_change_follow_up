@@ -2674,15 +2674,12 @@ function FleetOverview({ ships, crew, today }) {
           const shipCrew = crew.filter(c => c.shipId === ship.id);
           const onboard = shipCrew.filter(c => c.status === 'onboard');
           
-          // Yaklaşan değişim tarihlerini bulalım (Gelecekteki contractStart tarihleri)
+          // SADECE Yaklaşan (gelecekteki) contractStart tarihlerini buluyoruz (Bugün ve sonrası)
           const upcomingDates = [...new Set(
             shipCrew
               .filter(c => c.contractStart && new Date(c.contractStart).getTime() >= today.getTime())
               .map(c => c.contractStart)
           )].sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-
-          // Kontrati gecikmis olanlar
-          const expired = onboard.filter(c => c.contractEnd && new Date(c.contractEnd).getTime() < today.getTime());
 
           return (
             <div key={ship.id} className={`bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[400px] relative group hover:shadow-md transition-shadow`}>
@@ -2694,29 +2691,13 @@ function FleetOverview({ ships, crew, today }) {
                  <div className="text-[10px] font-bold text-slate-500 bg-slate-200 px-2 py-0.5 rounded shadow-sm">POB: {onboard.length}</div>
                </div>
 
-               {/* Degisim Listesi */}
+               {/* Degisim Listesi - SADECE PLANLI DEGISIMLER */}
                <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50/50">
-                  
-                  {/* Eger suresi gecmis biri varsa kirmizi kutuda uyar */}
-                  {expired.length > 0 && (
-                    <div className="border border-red-200 bg-red-50 rounded-lg p-2 shadow-sm">
-                       <div className="text-[10px] font-bold text-red-600 mb-1.5 flex items-center gap-1"><AlertTriangle size={12}/> EXPIRED CONTRACTS</div>
-                       {expired.map(c => (
-                         <div key={c.id} className="text-xs text-red-800 flex justify-between border-b border-red-100/50 last:border-0 pb-0.5 mb-0.5">
-                            <span className="font-medium truncate pr-1">{c.name}</span>
-                            <span className="shrink-0 opacity-80">{c.rank}</span>
-                         </div>
-                       ))}
-                    </div>
-                  )}
-
-                  {/* Yaklasan Planli Degisimler */}
                   {upcomingDates.length === 0 ? (
                     <div className="text-center text-slate-400 text-xs mt-10 italic">No upcoming changes planned.</div>
                   ) : (
                     upcomingDates.map(date => {
                        const onsigners = shipCrew.filter(c => c.contractStart === date);
-                       // Offsignerlari (ayni tarihte inenleri) gormek icin
                        const offsigners = shipCrew.filter(c => c.contractEnd === date);
 
                        return (
