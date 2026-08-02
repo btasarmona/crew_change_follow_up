@@ -1957,7 +1957,7 @@ function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, users, onA
                     <input type="checkbox" checked={m.checkOverlap} onChange={e => { const nm=[...matrix]; nm[i].checkOverlap=e.target.checked; setMatrix(nm); }} className="rounded border-slate-300 w-4 h-4 cursor-pointer" />
                   </td>
                   <td className="p-3 flex gap-1.5 flex-wrap items-center">
-                    {m.competencies.map((c, j) => (
+                    {(m.competencies || []).map((c, j) => (
                       <span key={j} className="bg-slate-200 text-slate-700 text-[11px] font-bold px-2 py-1 rounded border border-slate-300 flex items-center gap-1">
                         {c} <button onClick={()=>removeCompetency(i,j)} className="hover:text-red-500"><X size={10}/></button>
                       </span>
@@ -2031,7 +2031,7 @@ function CrewFormModal({ matrix, crewMember, onClose, onConfirm }) {
 
   const allComps = useMemo(() => {
     const set = new Set();
-    matrix.forEach(m => m.competencies.forEach(c => set.add(c)));
+    (matrix || []).forEach(m => (m.competencies || []).forEach(c => set.add(c)));
     return Array.from(set);
   }, [matrix]);
 
