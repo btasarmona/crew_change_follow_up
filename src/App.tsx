@@ -53,7 +53,7 @@ const generateId = () => Math.random().toString(36).substr(2, 9);
 const today = new Date(); // Gerçek zamanlı güncellenir
 
 // --- YENİ ROLLER VE RENK ŞEMASI ---
-const JOB_TITLES = ['Admin', 'Crew Manager', 'Welfare Officer', 'Marine S.I.', 'Tech S.I.', 'Tech. Manager', 'DPA', 'Marine Manager', 'CTO', 'Other'];
+const JOB_TITLES = ['Crew Manager', 'Welfare Officer', 'Crewing S.I.', 'Marine S.I.', 'Tech S.I.', 'Tech. Manager', 'DPA', 'Marine Manager', 'CTO', 'Other'];
 
 const getScoreColor = (score) => {
   if (!score && score !== 0) return 'text-slate-600 bg-slate-100';
@@ -1828,6 +1828,10 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelet
         <h2 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><Users size={20} className="text-indigo-500"/> User Management</h2>
         <p className="text-sm text-slate-500 mb-4 bg-slate-50 p-3 rounded border border-slate-100">Add, edit, or remove users. Admins can update their own username/password here. Viewers have read-only access and can only add notes.</p>
         
+        <datalist id="jobTitlesList">
+          {JOB_TITLES.map(j => <option key={j} value={j}/>)}
+        </datalist>
+
         <div className="overflow-x-auto mb-4">
           <table className="w-full text-sm text-left border border-slate-200 rounded-lg whitespace-nowrap bg-white">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
@@ -1854,13 +1858,12 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelet
                     </td>
                     <td className="p-3">
                       {isEditing ? (
-                        <select value={editUserData.jobTitle || 'Other'} onChange={e=>setEditUserData({...editUserData, jobTitle: e.target.value})} className="border border-blue-400 rounded p-1.5 text-xs outline-none" disabled={u.role === 'admin'}>
-                           {JOB_TITLES.map(j => <option key={j} value={j}>{j}</option>)}
-                        </select>
+                        <input list="jobTitlesList" value={editUserData.jobTitle || ''} onChange={e=>setEditUserData({...editUserData, jobTitle: e.target.value})} className="border border-blue-400 rounded p-1.5 text-xs w-full outline-none" placeholder="Type or select..."/>
                       ) : (
-                        <span className="font-bold text-slate-600">{u.jobTitle || 'Admin'}</span>
+                        <span className="font-bold text-slate-600">{u.jobTitle || 'Crew Manager'}</span>
                       )}
                     </td>
+                    
                     <td className="p-3">
                       {isEditing ? (
                         <select value={editUserData.role} onChange={e=>setEditUserData({...editUserData, role: e.target.value})} className="border border-blue-400 rounded p-1.5 text-xs outline-none" disabled={u.role === 'admin'}>
@@ -1896,9 +1899,7 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelet
                 <td className="p-3"><input type="text" placeholder="New Username" value={newUser.username} onChange={e=>setNewUser({...newUser, username: e.target.value})} className="w-full border border-indigo-200 rounded p-1.5 text-sm outline-none bg-white"/></td>
                 <td className="p-3"><input type="text" placeholder="Password" value={newUser.password} onChange={e=>setNewUser({...newUser, password: e.target.value})} className="w-full border border-indigo-200 rounded p-1.5 text-sm outline-none bg-white"/></td>
                 <td className="p-3">
-                  <select className="border border-indigo-200 rounded p-1.5 text-sm outline-none bg-white" value={newUser.jobTitle} onChange={e=>setNewUser({...newUser, jobTitle: e.target.value})}>
-                    {JOB_TITLES.filter(j=>j!=='Admin').map(j => <option key={j} value={j}>{j}</option>)}
-                  </select>
+                  <input list="jobTitlesList" placeholder="Job Title" value={newUser.jobTitle || ''} onChange={e=>setNewUser({...newUser, jobTitle: e.target.value})} className="w-full border border-indigo-200 rounded p-1.5 text-sm outline-none bg-white"/>
                 </td>
                 <td className="p-3">
                   <select className="border border-indigo-200 rounded p-1.5 text-sm outline-none bg-white" value={newUser.role} onChange={e=>setNewUser({...newUser, role: e.target.value})}>
@@ -2102,12 +2103,10 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelet
                       </span>
                     ))}
                     <div className="flex items-center ml-2 border border-purple-200 rounded overflow-hidden">
-                      <select id={`promo-step-${i}`} className="text-xs p-1 outline-none bg-white border-none w-28">
-                         {JOB_TITLES.map(j => <option key={j} value={j}>{j}</option>)}
-                      </select>
+                      <input list="jobTitlesList" id={`promo-step-${i}`} placeholder="Role..." className="text-xs p-1 outline-none bg-white border-none w-28"/>
                       <button onClick={()=>{
-                         const val = document.getElementById(`promo-step-${i}`).value;
-                         const nm = [...promoMatrix]; nm[i].steps.push(val); setPromoMatrix(nm);
+                         const el = document.getElementById(`promo-step-${i}`);
+                         if(el.value) { const nm = [...promoMatrix]; nm[i].steps.push(el.value); setPromoMatrix(nm); el.value = ''; }
                       }} className="bg-purple-50 hover:bg-purple-100 text-purple-700 px-2 py-1 font-bold text-xs border-l border-purple-200">+</button>
                     </div>
                   </td>
