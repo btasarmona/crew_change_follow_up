@@ -120,7 +120,6 @@ export default function App() {
   const [users, setUsers] = useState([]);
 
   const [promoMatrix, setPromoMatrix] = useState([]); 
-  const [debriefMatrix, setDebriefMatrix] = useState([]); 
   const [promotions, setPromotions] = useState([]);
 
   const [evalPrefill, setEvalPrefill] = useState(null);
@@ -173,11 +172,8 @@ export default function App() {
     const unsubPromoMat = onSnapshot(doc(db, getPath('settings'), 'promo_matrix'), snap => {
       if(snap.exists()) setPromoMatrix(snap.data().items || []);
     }, console.error);
-    const unsubDebriefMat = onSnapshot(doc(db, getPath('settings'), 'debrief_matrix'), snap => {
-      if(snap.exists()) setDebriefMatrix(snap.data().items || []);
-    }, console.error);
 
-    return () => { unsubShips(); unsubCrew(); unsubProcs(); unsubEvals(); unsubDebriefs(); unsubPromos(); unsubUsers(); unsubMatrix(); unsubSchema(); unsubPromoMat(); unsubDebriefMat(); };
+    return () => { unsubShips(); unsubCrew(); unsubProcs(); unsubEvals(); unsubDebriefs(); unsubPromos(); unsubUsers(); unsubMatrix(); unsubSchema(); unsubPromoMat(); };
   }, [fbUser]);
 
   // --- FIREBASE ACTIONS ---
@@ -358,13 +354,12 @@ export default function App() {
         <nav className="flex-1 flex justify-center items-center gap-2 overflow-x-auto mx-4">
           <TopNavItem icon={<Monitor />} label="Fleet Overview" active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} />
           <TopNavItem icon={<LayoutDashboard />} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-          {['admin', 'crewing'].includes(currentUser.role) && <TopNavItem icon={<FileCheck />} label="Procedures" active={activeTab === 'procedures'} onClick={() => setActiveTab('procedures')} />}
+          {currentUser.role !== 'viewer' && <TopNavItem icon={<FileCheck />} label="Procedures" active={activeTab === 'procedures'} onClick={() => setActiveTab('procedures')} />}
           <TopNavItem icon={<Star />} label="Eval Overview" active={activeTab === 'eval_overview'} onClick={() => setActiveTab('eval_overview')} />
-          {['admin', 'crewing'].includes(currentUser.role) && <TopNavItem icon={<Plus />} label="Add Eval" active={activeTab === 'eval_add'} onClick={() => setActiveTab('eval_add')} />}
+          {currentUser.role !== 'viewer' && <TopNavItem icon={<Plus />} label="Add Eval" active={activeTab === 'eval_add'} onClick={() => setActiveTab('eval_add')} />}
           <TopNavItem icon={<UserCheck />} label="Debriefings" active={activeTab === 'debriefings'} onClick={() => setActiveTab('debriefings')} badge={activeDebriefsCount} />
           <TopNavItem icon={<Briefcase />} label="Promo & Recruit" active={activeTab === 'promotions'} onClick={() => setActiveTab('promotions')} />
-          {currentUser.role === 'admin' && <TopNavItem icon={<Settings />} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />}
-        </nav>
+          {currentUser.role === 'admin' && <TopNavItem icon={<Settings />} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />}        </nav>
 
         <div className="flex items-center gap-4 border-l border-slate-700 pl-6 shrink-0">
           <div className="flex items-center gap-2 text-sm text-slate-300">
@@ -392,9 +387,9 @@ export default function App() {
               onDeleteCrew={attemptDeleteCrew}
             />
           )}
-          {['admin', 'crewing'].includes(currentUser.role) && activeTab === 'procedures' && (
+          {activeTab === 'procedures' && currentUser.role !== 'viewer' && (
             <Procedures 
-              procedures={procedures} schema={procSchema} currentUser={currentUser} debriefMatrix={debriefMatrix}
+              procedures={procedures} schema={procSchema} currentUser={currentUser}
               onUpdateProc={async (id, field, val) => await updateDoc(doc(db, getPath('procedures'), id), { [field]: val })}
               onUpdateDynamic={async (id, field, val) => {
                  const p = procedures.find(x=>x.id === id);
@@ -410,7 +405,7 @@ export default function App() {
                 const newDebrief = { 
                   crewName: proc.crewName, shipName: proc.shipName, rank: proc.rank, 
                   signOffDate: proc.date, startDate: '', endDate: '', status: 'active', 
-                  depts: debriefMatrix.map(m => ({ name: m.name, note: '', score: '' }))
+                  depts: [{name:'Deck', note:'', score:''},{name:'Engine', note:'', score:''},{name:'Safety', note:'', score:''},{name:'HR', note:'', score:''}] 
                 };
                 await setDoc(doc(db, getPath('debriefings'), generateId()), newDebrief);
                 await updateDoc(doc(db, getPath('procedures'), proc.id), { debriefDone: true });
@@ -425,7 +420,7 @@ export default function App() {
                exportToCSV={exportToCSV}
              />
           )}
-          {['admin', 'crewing'].includes(currentUser.role) && activeTab === 'eval_add' && (
+          {activeTab === 'eval_add' && currentUser.role !== 'viewer' && (
             <EvaluationsAdd 
               currentUser={currentUser} crew={crew} ships={ships} prefillData={evalPrefill} today={today}
               onAdd={async (newEvals) => { 
@@ -447,6 +442,7 @@ export default function App() {
                 if(p) {
                   const newSteps = [...p.steps];
                   newSteps[index] = { ...newSteps[index], [field]: val };
+                  // Eğer bir adıma reject atılırsa (true), diğer adımların açık rejectlerini de temizleyelim (opsiyonel mantık ama faydalı)
                   await updateDoc(doc(db, getPath('promotions'), id), { steps: newSteps });
                 }
               }}
@@ -455,29 +451,33 @@ export default function App() {
           
           {activeTab === 'debriefings' && (
              <Debriefings 
-               debriefings={debriefings} debriefMatrix={debriefMatrix} currentUser={currentUser} exportToCSV={exportToCSV}
+               debriefings={debriefings} currentUser={currentUser} exportToCSV={exportToCSV}
                ships={ships} matrix={matrix}
                onManualAdd={async (data) => {
                  const newDebrief = { 
                    crewName: data.crewName, shipName: data.shipName, rank: data.rank, 
                    signOffDate: data.signOffDate, startDate: '', endDate: '', status: 'active', 
-                   depts: debriefMatrix.map(m => ({ name: m.name, note: '', score: '' }))
+                   depts: [{name:'Deck', note:'', score:''},{name:'Engine', note:'', score:''},{name:'Safety', note:'', score:''},{name:'HR', note:'', score:''}] 
                  };
                  await setDoc(doc(db, getPath('debriefings'), generateId()), newDebrief);
                }}
                onUpdate={async (id, field, val) => await updateDoc(doc(db, getPath('debriefings'), id), { [field]: val })}
                onDelete={async (id) => await deleteDoc(doc(db, getPath('debriefings'), id))}
+               onUpdateDept={async (id, index, field, val) => {
+                 const d = debriefings.find(x=>x.id === id);
+                 if(d) {
+                   const newDepts = [...d.depts]; newDepts[index] = { ...newDepts[index], [field]: val };
+                   await updateDoc(doc(db, getPath('debriefings'), id), { depts: newDepts });
+                 }
+               }}
              />
           )}
-          {activeTab === 'settings' && currentUser.role === 'admin' && (
+{activeTab === 'settings' && currentUser.role === 'admin' && (
             <SettingsPage 
               matrix={matrix} setMatrix={async (nm) => await setDoc(doc(db, getPath('settings'), 'rank_matrix'), { items: nm })} 
               procSchema={procSchema} setProcSchema={async (ns) => await setDoc(doc(db, getPath('settings'), 'proc_schema'), { items: ns })} 
               promoMatrix={promoMatrix} setPromoMatrix={async (pm) => await setDoc(doc(db, getPath('settings'), 'promo_matrix'), { items: pm })}
-              debriefMatrix={debriefMatrix} setDebriefMatrix={async (dm) => await setDoc(doc(db, getPath('settings'), 'debrief_matrix'), { items: dm })}
-              users={users} setUsers={async (usrs) => {
-                 // For deleting/updating all we should handle it better, but for UI state we can rely on parent handlers
-              }}
+              users={users}
               onAddUser={async (u) => await setDoc(doc(db, getPath('appUsers'), u.id), u)}
               onUpdateUser={async (u) => await updateDoc(doc(db, getPath('appUsers'), u.id), u)}
               onDeleteUser={async (id) => await deleteDoc(doc(db, getPath('appUsers'), id))}
@@ -744,7 +744,7 @@ function Dashboard({ ships, crew, matrix, currentUser, today, onOpenLineup, onOp
                       <div className="text-xs text-slate-500 mb-1 truncate" title={c.competency}>{c.competency}</div>
                       <div className="text-[10px] text-slate-400">Readiness: <span className="text-slate-700">{c.readinessDate || 'TBA'}</span></div>
                     </div>
-                    {['admin', 'crewing'].includes(currentUser.role) && (
+                    {currentUser.role !== 'viewer' && (
                       <div className="flex flex-col gap-1 items-end shrink-0">
                          <button onClick={() => onAssign(c)} className="bg-blue-50 hover:bg-blue-100 text-blue-600 px-2 py-0.5 rounded text-[10px] font-bold transition-colors border border-blue-100 w-full text-center">Assign</button>
                          <div className="flex gap-1">
@@ -759,7 +759,7 @@ function Dashboard({ ships, crew, matrix, currentUser, today, onOpenLineup, onOp
               {pool.length === 0 && <div className="text-center text-slate-400 text-sm mt-10">No crew on leave.</div>}
             </div>
             
-            {['admin', 'crewing'].includes(currentUser.role) && (
+            {currentUser.role !== 'viewer' && (
               <div className="p-3 bg-white border-t border-slate-100 rounded-b-xl shrink-0">
                 <button onClick={onAddCrew} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-sm">
                   <UserPlus size={16}/> Add New Crew
@@ -888,7 +888,7 @@ function LineupModal({ ship, crew, matrix, currentUser, today, getDaysBetween, o
                           <div className="flex items-center gap-1 shrink-0 ml-auto">
                               <button onClick={() => onNotes(c.id, c.name)} className="text-slate-300 hover:text-slate-500" title="Notes"><MessageCircle size={14}/></button>
                               {c.notes?.length > 0 && <span className="text-[9px] text-red-500 font-bold">{c.notes.length}</span>}
-                              {['admin', 'crewing'].includes(currentUser.role) && (
+                              {currentUser.role !== 'viewer' && (
                                  <button onClick={() => onSignOff(c)} className="text-slate-300 hover:text-red-500 ml-1" title="Sign-off"><LogOut size={14}/></button>
                               )}
                           </div>
@@ -904,7 +904,7 @@ function LineupModal({ ship, crew, matrix, currentUser, today, getDaysBetween, o
                              {isPlanned && <span className="text-[9px] font-bold text-green-600 bg-white px-1 rounded">PLANNED</span>}
                           </div>
 
-                          {['admin', 'crewing'].includes(currentUser.role) && (
+                          {currentUser.role !== 'viewer' && (
                              <div className="absolute z-20 flex items-center opacity-0 group-hover:opacity-100 transition-opacity" style={{left: `${endPct}%`, top: '2px'}}>
                                <button onClick={() => onEditContract(c)} className="bg-white border border-slate-200 text-slate-400 hover:text-blue-500 p-0.5 rounded-full shadow-sm translate-x-1" title="Extend / Edit Contract">
                                  <ChevronRight size={14}/>
@@ -1098,7 +1098,7 @@ function EditContractModal({ crewMember, onClose, onConfirm }) {
   );
 }
 
-function Procedures({ procedures, schema, debriefMatrix, currentUser, onUpdateProc, onUpdateDynamic, onAddEval, onAddDebrief, onDeleteProc }) {
+function Procedures({ procedures, schema, currentUser, onUpdateProc, onUpdateDynamic, onAddEval, onAddDebrief, onDeleteProc }) {
   const [tab, setTab] = useState('active'); 
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   
@@ -1440,7 +1440,7 @@ function EvaluationsAdd({ currentUser, crew, ships, prefillData, today, onAdd, o
   );
 }
 
-function Debriefings({ debriefings, debriefMatrix, currentUser, onUpdate, onDelete, exportToCSV, ships, matrix, onManualAdd }) {
+function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelete, exportToCSV, ships, matrix, onManualAdd }) {
   const [tab, setTab] = useState('active');
   const [editModal, setEditModal] = useState(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
@@ -1486,7 +1486,7 @@ function Debriefings({ debriefings, debriefMatrix, currentUser, onUpdate, onDele
       <div className="flex justify-between items-end shrink-0">
         <h1 className="text-2xl font-bold text-slate-800">Senior Officer Debriefings</h1>
         <div className="flex items-center gap-3">
-          {['admin', 'crewing'].includes(currentUser.role) && (
+          {currentUser.role !== 'viewer' && (
              <button 
                onClick={() => {
                  setNewDebrief({ crewName: '', rank: '', shipName: '', signOffDate: new Date().toISOString().split('T')[0] });
@@ -1500,20 +1500,20 @@ function Debriefings({ debriefings, debriefMatrix, currentUser, onUpdate, onDele
           {tab === 'archived' && (
             <button 
               onClick={() => {
-                const exportData = displayData.map(d => {
-                  const row = {
-                    'Sign-off Date': d.signOffDate,
-                    'Crew Name': d.crewName,
-                    'Rank': d.rank,
-                    'Vessel': d.shipName
-                  };
-                  (debriefMatrix || []).forEach(m => {
-                    const found = d.depts?.find(x => x.name === m.name);
-                    row[`${m.name} Score`] = found?.score || '';
-                    row[`${m.name} Note`] = found?.note || '';
-                  });
-                  return row;
-                });
+                const exportData = displayData.map(d => ({
+                  'Sign-off Date': d.signOffDate,
+                  'Crew Name': d.crewName,
+                  'Rank': d.rank,
+                  'Vessel': d.shipName,
+                  'Deck Score': d.depts[0]?.score || '',
+                  'Deck Note': d.depts[0]?.note || '',
+                  'Engine Score': d.depts[1]?.score || '',
+                  'Engine Note': d.depts[1]?.note || '',
+                  'Safety Score': d.depts[2]?.score || '',
+                  'Safety Note': d.depts[2]?.note || '',
+                  'HR Score': d.depts[3]?.score || '',
+                  'HR Note': d.depts[3]?.note || ''
+                }));
                 exportToCSV(exportData, 'debriefings_archive_export');
               }} 
               className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md font-bold text-sm shadow-sm transition-colors flex items-center gap-2"
@@ -1565,14 +1565,17 @@ function Debriefings({ debriefings, debriefMatrix, currentUser, onUpdate, onDele
                 <th className="px-4 py-3 font-semibold">Sign-off Date</th>
                 <th className="px-4 py-3 font-semibold">Crew Info</th>
                 <th className="px-4 py-3 font-semibold">Vessel</th>
-                {(debriefMatrix || []).map(m => <th key={m.id || m.name} className="px-4 py-3 font-semibold">{m.name}</th>)}
+                <th className="px-4 py-3 font-semibold">Deck</th>
+                <th className="px-4 py-3 font-semibold">Engine</th>
+                <th className="px-4 py-3 font-semibold">Safety</th>
+                <th className="px-4 py-3 font-semibold">HR</th>
                 <th className="px-4 py-3 font-semibold text-center border-l border-slate-200">Avg</th>
                 <th className="px-4 py-3 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {displayData.map(d => {
-                const scores = (d.depts || []).map(x=>Number(x.score)).filter(x => !isNaN(x) && x > 0);
+                const scores = d.depts.map(x=>Number(x.score)).filter(x => !isNaN(x) && x > 0);
                 const avg = scores.length ? (scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1) : null;
                 const isAvgLow = avg && avg < 70;
 
@@ -1585,10 +1588,10 @@ function Debriefings({ debriefings, debriefMatrix, currentUser, onUpdate, onDele
                     </td>
                     <td className="px-4 py-3 text-slate-600">{d.shipName}</td>
                     
-                    {(debriefMatrix || []).map(m => {
-                      const found = (d.depts || []).find(x => x.name === m.name) || { score: '', note: '' };
-                      return <td key={m.id || m.name} className="px-4 py-3"><DeptCell dept={found} /></td>;
-                    })}
+                    <td className="px-4 py-3"><DeptCell dept={d.depts[0]} /></td>
+                    <td className="px-4 py-3"><DeptCell dept={d.depts[1]} /></td>
+                    <td className="px-4 py-3"><DeptCell dept={d.depts[2]} /></td>
+                    <td className="px-4 py-3"><DeptCell dept={d.depts[3]} /></td>
                     
                     <td className="px-4 py-3 text-center border-l border-slate-100">
                       <span className={`bg-slate-100 px-2 py-1 rounded font-bold ${isAvgLow ? 'text-red-600' : 'text-slate-700'}`}>{avg || '-'}</span>
@@ -1598,9 +1601,7 @@ function Debriefings({ debriefings, debriefMatrix, currentUser, onUpdate, onDele
                       {tab === 'active' && currentUser.role !== 'viewer' ? (
                         <div className="flex justify-end items-center gap-2">
                            <button onClick={() => setEditModal(d)} className="text-blue-600 hover:bg-blue-50 px-2 py-1 rounded border border-blue-200 font-medium text-xs">Edit / Fill</button>
-                           {['admin', 'crewing'].includes(currentUser.role) && (
-                             <button onClick={() => onUpdate(d.id, 'status', 'archived')} className="text-emerald-600 hover:bg-emerald-50 px-2 py-1 rounded border border-emerald-200 font-medium text-xs">Complete</button>
-                           )}
+                           <button onClick={() => onUpdate(d.id, 'status', 'archived')} className="text-emerald-600 hover:bg-emerald-50 px-2 py-1 rounded border border-emerald-200 font-medium text-xs">Complete</button>
                            {currentUser.role === 'admin' && (
                              <button onClick={() => setDeleteConfirmId(d.id)} className="text-slate-400 hover:text-red-500 p-1" title="Delete"><Trash2 size={16}/></button>
                            )}
@@ -1617,7 +1618,7 @@ function Debriefings({ debriefings, debriefMatrix, currentUser, onUpdate, onDele
                   </tr>
                 );
               })}
-              {displayData.length === 0 && <tr><td colSpan={(debriefMatrix||[]).length + 5} className="text-center py-12 text-slate-400">No debriefing records found.</td></tr>}
+              {displayData.length === 0 && <tr><td colSpan={9} className="text-center py-12 text-slate-400">No debriefing records found.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -1648,53 +1649,37 @@ function Debriefings({ debriefings, debriefMatrix, currentUser, onUpdate, onDele
                <div className="flex gap-4">
                   <div className="flex-1">
                     <label className="block text-xs font-bold text-slate-500 mb-1">Debrief Start Date</label>
-                    <input type="date" disabled={!['admin', 'crewing'].includes(currentUser.role)} value={editModal.startDate} onChange={e=>setEditModal({...editModal, startDate: e.target.value})} className="w-full border border-slate-300 rounded p-1.5 text-sm outline-none bg-white disabled:bg-slate-100 disabled:cursor-not-allowed"/>
+                    <input type="date" value={editModal.startDate} onChange={e=>setEditModal({...editModal, startDate: e.target.value})} className="w-full border border-slate-300 rounded p-1.5 text-sm outline-none bg-white"/>
                   </div>
                   <div className="flex-1">
                     <label className="block text-xs font-bold text-slate-500 mb-1">Debrief End Date</label>
-                    <input type="date" disabled={!['admin', 'crewing'].includes(currentUser.role)} value={editModal.endDate} onChange={e=>setEditModal({...editModal, endDate: e.target.value})} className="w-full border border-slate-300 rounded p-1.5 text-sm outline-none bg-white disabled:bg-slate-100 disabled:cursor-not-allowed"/>
+                    <input type="date" value={editModal.endDate} onChange={e=>setEditModal({...editModal, endDate: e.target.value})} className="w-full border border-slate-300 rounded p-1.5 text-sm outline-none bg-white"/>
                   </div>
                </div>
                
                <div className="space-y-3">
-                 {(debriefMatrix || []).map((matrixDept, idx) => {
-                   const deptData = (editModal.depts || []).find(x => x.name === matrixDept.name) || { name: matrixDept.name, note: '', score: '' };
-                   const isAdminOrCTO = currentUser.role === 'admin' || currentUser.jobTitle === 'CTO';
-                   const canEdit = isAdminOrCTO || (matrixDept.allowedRoles || []).includes(currentUser.jobTitle);
-
-                   return (
-                     <div key={idx} className={`bg-white p-3 rounded-lg border shadow-sm flex gap-3 items-start ${canEdit ? 'border-blue-200' : 'border-slate-200 opacity-80'}`}>
-                       <div className="w-24 shrink-0 font-bold text-slate-700 text-sm mt-1">{matrixDept.name}</div>
-                       <textarea 
-                         disabled={!canEdit}
-                         placeholder={canEdit ? "Enter detailed notes..." : "Read only..."}
-                         value={deptData.note} onChange={e=>{
-                           const newDepts = [...(editModal.depts || [])]; 
-                           const existingIdx = newDepts.findIndex(x => x.name === matrixDept.name);
-                           if(existingIdx > -1) newDepts[existingIdx].note = e.target.value;
-                           else newDepts.push({ name: matrixDept.name, note: e.target.value, score: deptData.score });
-                           setEditModal({...editModal, depts: newDepts});
+                 {editModal.depts.map((dept, idx) => (
+                   <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex gap-3 items-start">
+                     <div className="w-24 shrink-0 font-bold text-slate-700 text-sm mt-1">{dept.name}</div>
+                     <textarea 
+                       placeholder="Enter detailed notes..." 
+                       value={dept.note} onChange={e=>{
+                         const newDepts = [...editModal.depts]; newDepts[idx].note = e.target.value; setEditModal({...editModal, depts: newDepts});
+                       }} 
+                       className="flex-1 border border-slate-300 rounded p-2 text-sm resize-none focus:outline-none focus:border-blue-500 h-16 bg-slate-50"
+                     />
+                     <div className="w-20 shrink-0">
+                       <input 
+                         type="number" placeholder="Score" max="100" min="0" 
+                         value={dept.score} onChange={e=>{
+                           const newDepts = [...editModal.depts]; newDepts[idx].score = e.target.value; setEditModal({...editModal, depts: newDepts});
                          }} 
-                         className="flex-1 border border-slate-300 rounded p-2 text-sm resize-none focus:outline-none focus:border-blue-500 h-16 bg-slate-50 disabled:bg-slate-100"
+                         className="w-full border border-slate-300 rounded p-2 text-sm font-bold text-blue-600 focus:outline-none focus:border-blue-500 text-center bg-slate-50"
                        />
-                       <div className="w-20 shrink-0">
-                         <input 
-                           disabled={!canEdit}
-                           type="number" placeholder="Score" max="100" min="0" 
-                           value={deptData.score} onChange={e=>{
-                             const newDepts = [...(editModal.depts || [])]; 
-                             const existingIdx = newDepts.findIndex(x => x.name === matrixDept.name);
-                             if(existingIdx > -1) newDepts[existingIdx].score = e.target.value;
-                             else newDepts.push({ name: matrixDept.name, note: deptData.note, score: e.target.value });
-                             setEditModal({...editModal, depts: newDepts});
-                           }} 
-                           className="w-full border border-slate-300 rounded p-2 text-sm font-bold text-blue-600 focus:outline-none focus:border-blue-500 text-center bg-slate-50 disabled:bg-slate-100"
-                         />
-                         <div className="text-center text-[10px] text-slate-400 mt-1">out of 100</div>
-                       </div>
+                       <div className="text-center text-[10px] text-slate-400 mt-1">out of 100</div>
                      </div>
-                   );
-                 })}
+                   </div>
+                 ))}
                </div>
             </div>
             
@@ -1703,7 +1688,10 @@ function Debriefings({ debriefings, debriefMatrix, currentUser, onUpdate, onDele
                 <button onClick={() => {
                   onUpdate(editModal.id, 'startDate', editModal.startDate);
                   onUpdate(editModal.id, 'endDate', editModal.endDate);
-                  onUpdate(editModal.id, 'depts', editModal.depts || []);
+                  editModal.depts.forEach((d, i) => {
+                    onUpdateDept(editModal.id, i, 'note', d.note);
+                    onUpdateDept(editModal.id, i, 'score', d.score);
+                  });
                   setEditModal(null);
                 }} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold shadow-sm">Save Changes</button>
               </div>
@@ -1757,28 +1745,24 @@ function Debriefings({ debriefings, debriefMatrix, currentUser, onUpdate, onDele
     );
   }
 
-function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, promoMatrix, setPromoMatrix, debriefMatrix, setDebriefMatrix, users, setUsers, onAddUser, onUpdateUser, onDeleteUser, ships, onAddShip, onUpdateShip, onDeleteShip, currentUser, setCurrentUser }) {
-  const [newCol, setNewCol] = useState({ name: '', type: 'checkbox', appliesTo: 'both' });
-  const [newRank, setNewRank] = useState({ rank: '', dept: 'Deck', checkOverlap: false, competencies: [] });
-  const [newCompText, setNewCompText] = useState({});
-  const [newUser, setNewUser] = useState({ username: '', password: '', role: 'viewer', jobTitle: '' });
-  const [newPromoRow, setNewPromoRow] = useState({ rank: '', steps: [] });
-  const [newDebriefRow, setNewDebriefRow] = useState({ name: '', allowedRoles: [] });
+  function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, promoMatrix, setPromoMatrix, users, onAddUser, onUpdateUser, onDeleteUser, ships, onAddShip, onUpdateShip, onDeleteShip, currentUser, setCurrentUser }) {
+    const [newCol, setNewCol] = useState({ name: '', type: 'checkbox', appliesTo: 'both' });
+    const [newRank, setNewRank] = useState({ rank: '', dept: 'Deck', checkOverlap: false, competencies: [] });
+    const [newCompText, setNewCompText] = useState({});
+    const [newUser, setNewUser] = useState({ username: '', password: '', role: 'viewer', jobTitle: 'Crew Manager' });
+    const [newPromoRow, setNewPromoRow] = useState({ rank: '', steps: [] });
   const [newShip, setNewShip] = useState({ name: '', flag: 'TBA', minSafeManning: 10, cabinCapacity: 15, lsaCapacity: 20, color: 'blue' });
 
+  // Edit States
   const [editingUserId, setEditingUserId] = useState(null);
   const [editUserData, setEditUserData] = useState({});
   
   const [editingShipId, setEditingShipId] = useState(null);
   const [editShipData, setEditShipData] = useState({});
-  
-  const JOB_TITLES = ['Crew Manager', 'Welfare Officer', 'Crewing S.I.', 'Marine S.I.', 'Tech S.I.', 'Tech. Manager', 'DPA', 'Marine Manager', 'CTO', 'Other'];
-
-  const generateId = () => Math.random().toString(36).substr(2, 9);
 
   const moveMatrix = (index, dir) => {
-    if ((dir === -1 && index === 0) || (dir === 1 && index === (matrix||[]).length - 1)) return;
-    const newArr = [...(matrix||[])];
+    if ((dir === -1 && index === 0) || (dir === 1 && index === matrix.length - 1)) return;
+    const newArr = [...matrix];
     const temp = newArr[index];
     newArr[index] = newArr[index + dir];
     newArr[index + dir] = temp;
@@ -1787,45 +1771,39 @@ function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, promoMatri
   
   const addRank = () => {
     if(!newRank.rank) return;
-    setMatrix([...(matrix||[]), { ...newRank, id: generateId() }]);
+    setMatrix([...matrix, { ...newRank, id: generateId() }]);
     setNewRank({ rank: '', dept: 'Deck', checkOverlap: false, competencies: [] });
   };
   
-  const deleteRank = (id) => setMatrix((matrix||[]).filter(m => m.id !== id));
+  const deleteRank = (id) => setMatrix(matrix.filter(m => m.id !== id));
   
   const addCompetency = (index) => {
     const text = newCompText[index];
     if(!text) return;
-    const nm = [...(matrix||[])];
-    if(!nm[index].competencies) nm[index].competencies = [];
+    const nm = [...matrix];
     if(!nm[index].competencies.includes(text)) nm[index].competencies.push(text);
     setMatrix(nm);
     setNewCompText({...newCompText, [index]: ''});
   };
 
   const removeCompetency = (mIndex, cIndex) => {
-    const nm = [...(matrix||[])];
+    const nm = [...matrix];
     nm[mIndex].competencies.splice(cIndex, 1);
     setMatrix(nm);
   };
 
   const addColumn = () => {
     if(!newCol.name) return;
-    setProcSchema([...(procSchema||[]), { ...newCol, id: 'ps'+Date.now() }]);
+    setProcSchema([...procSchema, { ...newCol, id: generateId() }]);
     setNewCol({ name: '', type: 'checkbox', appliesTo: 'both' });
   };
-
-  const deleteColumn = (id) => setProcSchema((procSchema||[]).filter(c => c.id !== id));
+  
+  const deleteColumn = (id) => setProcSchema(procSchema.filter(c => c.id !== id));
 
   const addUser = () => {
     if(!newUser.username || !newUser.password) return;
     onAddUser({ ...newUser, id: 'u'+Date.now() });
-    setNewUser({ username: '', password: '', role: 'viewer', jobTitle: '' });
-  };
-
-  const deleteUser = (id) => {
-    if ((users||[]).find(u => u.id === id)?.role === 'admin') return; 
-    onDeleteUser(id);
+    setNewUser({ username: '', password: '', role: 'viewer', jobTitle: 'Crew Manager' });
   };
 
   const addPromoRow = () => {
@@ -1834,10 +1812,9 @@ function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, promoMatri
     setNewPromoRow({ rank: '', steps: [] });
   };
 
-  const addDebriefRow = () => {
-    if(!newDebriefRow.name) return;
-    setDebriefMatrix([...(debriefMatrix||[]), { id: 'dm'+Date.now(), name: newDebriefRow.name, allowedRoles: newDebriefRow.allowedRoles }]);
-    setNewDebriefRow({ name: '', allowedRoles: [] });
+  const deleteUser = (id) => {
+    if (users.find(u => u.id === id)?.role === 'admin') return; 
+    onDeleteUser(id);
   };
   
   const addShip = () => {
@@ -1850,22 +1827,22 @@ function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, promoMatri
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-slate-800">System Administration</h1>
       
-      <datalist id="jobTitlesList">
-        {JOB_TITLES.map(j => <option key={j} value={j}/>)}
-      </datalist>
-
       {/* 1. USER MANAGEMENT */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
         <h2 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><Users size={20} className="text-indigo-500"/> User Management</h2>
         <p className="text-sm text-slate-500 mb-4 bg-slate-50 p-3 rounded border border-slate-100">Add, edit, or remove users. Admins can update their own username/password here. Viewers have read-only access and can only add notes.</p>
         
+        <datalist id="jobTitlesList">
+          {JOB_TITLES.map(j => <option key={j} value={j}/>)}
+        </datalist>
+
         <div className="overflow-x-auto mb-4">
           <table className="w-full text-sm text-left border border-slate-200 rounded-lg whitespace-nowrap bg-white">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
-              <tr><th className="p-3">Username</th><th className="p-3">Password</th><th className="p-3">Job Title</th><th className="p-3">Access Level</th><th className="p-3 text-right">Actions</th></tr>
+            <tr><th className="p-3">Username</th><th className="p-3">Password</th><th className="p-3">Job Title</th><th className="p-3">Access Level</th><th className="p-3 text-right">Actions</th></tr>
             </thead>
             <tbody>
-              {(users||[]).map(u => {
+              {users.map(u => {
                 const isEditing = editingUserId === u.id;
                 return (
                   <tr key={u.id} className="border-b border-slate-100 hover:bg-slate-50/50">
@@ -1890,16 +1867,16 @@ function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, promoMatri
                         <span className="font-bold text-slate-600">{u.jobTitle || 'Crew Manager'}</span>
                       )}
                     </td>
+                    
                     <td className="p-3">
                       {isEditing ? (
                         <select value={editUserData.role} onChange={e=>setEditUserData({...editUserData, role: e.target.value})} className="border border-blue-400 rounded p-1.5 text-xs outline-none" disabled={u.role === 'admin'}>
                            <option value="admin">Admin (All Access)</option>
-                           <option value="crewing">Crewing (Operations)</option>
-                           <option value="user">User (Evaluator)</option>
+                           <option value="user">Editor (User)</option>
                            <option value="viewer">Viewer (Read Only)</option>
                         </select>
                       ) : (
-                        <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${u.role==='admin'?'bg-red-100 text-red-700':u.role==='crewing'?'bg-indigo-100 text-indigo-700':u.role==='user'?'bg-blue-100 text-blue-700':'bg-slate-200 text-slate-700'}`}>{u.role}</span>
+                        <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${u.role==='admin'?'bg-red-100 text-red-700':u.role==='user'?'bg-blue-100 text-blue-700':'bg-slate-200 text-slate-700'}`}>{u.role}</span>
                       )}
                     </td>
                     <td className="p-3 text-right">
@@ -1914,8 +1891,8 @@ function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, promoMatri
                         </div>
                       ) : (
                         <div className="flex justify-end gap-2">
-                          <button onClick={() => { setEditingUserId(u.id); setEditUserData(u); }} className="text-slate-400 hover:text-blue-500 p-1"><Edit2 size={16}/></button>
-                          {u.role !== 'admin' && <button onClick={()=>deleteUser(u.id)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>}
+                           <button onClick={() => { setEditingUserId(u.id); setEditUserData(u); }} className="text-slate-400 hover:text-blue-500 p-1"><Edit2 size={16}/></button>
+                           {u.role !== 'admin' && <button onClick={()=>deleteUser(u.id)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>}
                         </div>
                       )}
                     </td>
@@ -1930,7 +1907,7 @@ function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, promoMatri
                 </td>
                 <td className="p-3">
                   <select className="border border-indigo-200 rounded p-1.5 text-sm outline-none bg-white" value={newUser.role} onChange={e=>setNewUser({...newUser, role: e.target.value})}>
-                    <option value="crewing">Crewing (Operations)</option><option value="user">User (Evaluator)</option><option value="viewer">Viewer</option>
+                    <option value="user">Editor</option><option value="viewer">Viewer</option>
                   </select>
                 </td>
                 <td className="p-3 text-right"><button onClick={addUser} disabled={!newUser.username || !newUser.password} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm font-bold disabled:opacity-50">Add User</button></td>
@@ -2013,100 +1990,100 @@ function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, promoMatri
         </div>
       </div>
 
-      {/* 3. RANK MATRIX */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-        <h2 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><Ship size={20} className="text-blue-500"/> Complience Matrix (Ranks)</h2>
+        <h2 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><LayoutDashboard size={20} className="text-blue-500"/> Compliance Matrix (Ranks)</h2>
         <p className="text-sm text-slate-500 mb-4 bg-slate-50 p-3 rounded border border-slate-100">Add or edit ranks, set check overlap logic, and define accepted competencies (licenses). These competencies populate the dropdowns elsewhere.</p>
         
         <div className="overflow-x-auto mb-4">
           <table className="w-full text-sm text-left border border-slate-200 rounded-lg whitespace-nowrap bg-white">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
-              <tr><th className="p-3 w-12">Ord.</th><th className="p-3 font-semibold w-40">Rank</th><th className="p-3 font-semibold w-32">Dept</th><th className="p-3 text-center font-semibold w-24">Overlap</th><th className="p-3 font-semibold w-1/2">Required Competencies</th><th className="p-3 text-right"></th></tr>
+              <tr><th className="p-3 w-12">Ord.</th><th className="p-3 font-semibold w-40">Rank</th><th className="p-3 font-semibold w-32">Dept</th><th className="p-3 text-center font-semibold w-24">Overlap</th><th className="p-3 font-semibold">Competencies</th><th className="p-3"></th></tr>
             </thead>
             <tbody>
-              {(matrix||[]).map((m, i) => (
+              {matrix.map((m, i) => (
                 <tr key={m.id} className="border-b border-slate-100 hover:bg-slate-50/50">
                   <td className="p-2 text-center">
                     <div className="flex flex-col items-center">
                       <button onClick={()=>moveMatrix(i, -1)} className={`hover:bg-slate-200 rounded ${i===0?'text-slate-300':'text-slate-600'}`} disabled={i===0}><ChevronUp size={16}/></button>
-                      <button onClick={()=>moveMatrix(i, 1)} className={`hover:bg-slate-200 rounded ${i===(matrix||[]).length-1?'text-slate-300':'text-slate-600'}`} disabled={i===(matrix||[]).length-1}><ChevronDown size={16}/></button>
+                      <button onClick={()=>moveMatrix(i, 1)} className={`hover:bg-slate-200 rounded ${i===matrix.length-1?'text-slate-300':'text-slate-600'}`} disabled={i===matrix.length-1}><ChevronDown size={16}/></button>
                     </div>
                   </td>
                   <td className="p-3 font-bold text-slate-800">
-                    <input type="text" value={m.rank} onChange={e=>{const nm=[...(matrix||[])];nm[i].rank=e.target.value;setMatrix(nm);}} className="w-full border-none bg-transparent focus:ring-1 rounded p-1"/>
+                    <input type="text" value={m.rank} onChange={e=>{const nm=[...matrix];nm[i].rank=e.target.value;setMatrix(nm);}} className="w-full border-none bg-transparent focus:ring-1 rounded p-1"/>
                   </td>
                   <td className="p-3">
-                    <select className="border border-slate-300 rounded p-1.5 text-sm bg-white" value={m.dept} onChange={e => { const nm=[...(matrix||[])]; nm[i].dept=e.target.value; setMatrix(nm); }}>
+                    <select className="border border-slate-300 rounded p-1.5 text-sm bg-white" value={m.dept} onChange={e => { const nm=[...matrix]; nm[i].dept=e.target.value; setMatrix(nm); }}>
                       <option>Deck</option><option>Engine</option><option>Other</option>
                     </select>
                   </td>
                   <td className="p-3 text-center">
-                    <input type="checkbox" checked={m.checkOverlap} onChange={e => { const nm=[...(matrix||[])]; nm[i].checkOverlap=e.target.checked; setMatrix(nm); }} className="rounded border-slate-300 w-4 h-4 cursor-pointer" />
+                    <input type="checkbox" checked={m.checkOverlap} onChange={e => { const nm=[...matrix]; nm[i].checkOverlap=e.target.checked; setMatrix(nm); }} className="rounded border-slate-300 w-4 h-4 cursor-pointer" />
                   </td>
                   <td className="p-3 flex gap-1.5 flex-wrap items-center">
                     {(m.competencies || []).map((c, j) => (
-                      <span key={j} className="bg-blue-100 text-blue-800 text-[11px] font-bold px-2 py-1 rounded border border-blue-200 flex items-center gap-1">
-                        {c} <button onClick={()=>removeCompetency(i,j)} className="hover:text-red-500 ml-1"><X size={10}/></button>
+                      <span key={j} className="bg-slate-200 text-slate-700 text-[11px] font-bold px-2 py-1 rounded border border-slate-300 flex items-center gap-1">
+                        {c} <button onClick={()=>removeCompetency(i,j)} className="hover:text-red-500"><X size={10}/></button>
                       </span>
                     ))}
                     <div className="flex items-center ml-2 border border-blue-200 rounded overflow-hidden">
-                      <input type="text" placeholder="Add comp..." value={newCompText[i]||''} onChange={e=>setNewCompText({...newCompText, [i]: e.target.value})} className="text-xs p-1 w-24 outline-none" onKeyDown={e=>e.key==='Enter'&&addCompetency(i)}/>
-                      <button onClick={()=>addCompetency(i)} className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-2 py-1 font-bold text-xs border-l border-blue-200">+</button>
+                      <input type="text" placeholder="Add comp..." value={newCompText[i]||''} onChange={e=>setNewCompText({...newCompText, [i]: e.target.value})} className="text-xs p-1 w-24 outline-none"/>
+                      <button onClick={()=>addCompetency(i)} className="bg-blue-50 hover:bg-blue-100 text-blue-600 px-2 py-1 font-bold">+</button>
                     </div>
                   </td>
-                  <td className="p-3 text-right"><button onClick={()=>deleteRank(m.id)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={16}/></button></td>
+                  <td className="p-3 text-right">
+                    <button onClick={()=>deleteRank(m.id)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
+                  </td>
                 </tr>
               ))}
               <tr className="bg-blue-50/50">
                 <td className="p-3 text-center"><Plus size={16} className="text-blue-400 mx-auto"/></td>
-                <td className="p-3"><input type="text" placeholder="New Rank Name" value={newRank.rank} onChange={e=>setNewRank({...newRank, rank: e.target.value})} className="w-full border border-blue-200 rounded p-1.5 text-sm outline-none bg-white"/></td>
+                <td className="p-3"><input type="text" placeholder="New Rank Name" value={newRank.rank} onChange={e=>setNewRank({...newRank, rank: e.target.value})} className="w-full border border-blue-200 rounded p-1.5 text-sm"/></td>
                 <td className="p-3">
-                  <select className="border border-blue-200 rounded p-1.5 text-sm bg-white" value={newRank.dept} onChange={e=>setNewRank({...newRank, dept: e.target.value})}>
+                  <select className="border border-blue-200 rounded p-1.5 text-sm" value={newRank.dept} onChange={e=>setNewRank({...newRank, dept: e.target.value})}>
                     <option>Deck</option><option>Engine</option><option>Other</option>
                   </select>
                 </td>
-                <td className="p-3 text-center"><label className="cursor-pointer flex items-center justify-center gap-1 text-xs text-slate-600"><input type="checkbox" checked={newRank.checkOverlap} onChange={e=>setNewRank({...newRank, checkOverlap: e.target.checked})}/> Block Overlap</label></td>
-                <td className="p-3"><span className="text-xs text-blue-400 italic">Add rank first, then add competencies.</span></td>
-                <td className="p-3 text-right"><button onClick={addRank} disabled={!newRank.rank} className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-bold disabled:opacity-50">Add Rank</button></td>
+                <td className="p-3 text-center"><input type="checkbox" checked={newRank.checkOverlap} onChange={e=>setNewRank({...newRank, checkOverlap: e.target.checked})} className="rounded border-blue-300 w-4 h-4" /></td>
+                <td className="p-3"><span className="text-xs text-blue-400 italic">Add competencies after saving.</span></td>
+                <td className="p-3 text-right"><button onClick={addRank} disabled={!newRank.rank} className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-bold disabled:opacity-50">Add</button></td>
               </tr>
             </tbody>
           </table>
         </div>
       </div>
-
-      {/* 4. PROCEDURES SCHEMA */}
+      
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-         <h2 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><FileCheck size={20} className="text-green-500"/> Procedure Dynamic Columns</h2>
-         <p className="text-sm text-slate-500 mb-4 bg-slate-50 p-3 rounded border border-slate-100">Configure custom columns for the Procedures Follow Up table.</p>
-         
-         <ul className="space-y-2 mb-4">
-           {(procSchema||[]).map(s => (
-             <li key={s.id} className="flex flex-wrap gap-4 items-center bg-white p-3 rounded-lg border border-slate-200 shadow-sm text-sm">
-               <input type="text" value={s.name} onChange={e => { const ns=[...(procSchema||[])]; ns.find(x=>x.id===s.id).name=e.target.value; setProcSchema(ns); }} className="font-bold text-slate-700 w-40 border-none bg-transparent outline-none"/>
-               <select value={s.type} onChange={e => { const ns=[...(procSchema||[])]; ns.find(x=>x.id===s.id).type=e.target.value; setProcSchema(ns); }} className="border border-slate-300 rounded p-1 text-xs">
-                 <option value="checkbox">Checkbox</option><option value="date">Date</option>
-               </select>
-               <select value={s.appliesTo} onChange={e => { const ns=[...(procSchema||[])]; ns.find(x=>x.id===s.id).appliesTo=e.target.value; setProcSchema(ns); }} className="border border-slate-300 rounded p-1 text-xs flex-1">
-                 <option value="onsigner">Onsigner Only</option><option value="offsigner">Offsigner Only</option><option value="both">Both</option>
-               </select>
-               <button onClick={()=>deleteColumn(s.id)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
-             </li>
-           ))}
-         </ul>
+        <h2 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><FileCheck size={20} className="text-green-500"/> Procedure Dynamic Columns</h2>
+        <p className="text-sm text-slate-500 mb-4 bg-slate-50 p-3 rounded border border-slate-100">Configure custom columns for the Procedures Follow Up table.</p>
+        
+        <ul className="space-y-2 mb-4">
+          {procSchema.map(s => (
+            <li key={s.id} className="flex flex-wrap gap-4 items-center bg-white p-3 rounded-lg border border-slate-200 shadow-sm text-sm">
+              <input type="text" value={s.name} onChange={e => { const ns=[...procSchema]; ns.find(x=>x.id===s.id).name=e.target.value; setProcSchema(ns); }} className="font-bold text-slate-700 w-40 border-none bg-transparent outline-none"/>
+              <select value={s.type} onChange={e => { const ns=[...procSchema]; ns.find(x=>x.id===s.id).type=e.target.value; setProcSchema(ns); }} className="border border-slate-300 rounded p-1 text-xs">
+                <option value="checkbox">Checkbox</option><option value="date">Date</option>
+              </select>
+              <select value={s.appliesTo} onChange={e => { const ns=[...procSchema]; ns.find(x=>x.id===s.id).appliesTo=e.target.value; setProcSchema(ns); }} className="border border-slate-300 rounded p-1 text-xs flex-1">
+                <option value="onsigner">Onsigner Only</option><option value="offsigner">Offsigner Only</option><option value="both">Both</option>
+              </select>
+              <button onClick={()=>deleteColumn(s.id)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
+            </li>
+          ))}
+        </ul>
 
-         <div className="flex gap-3 items-center bg-green-50 p-3 rounded-lg border border-green-200">
-            <input type="text" placeholder="New Column Name" value={newCol.name} onChange={e=>setNewCol({...newCol, name: e.target.value})} className="border border-green-300 rounded p-1.5 text-sm w-40"/>
-            <select value={newCol.type} onChange={e=>setNewCol({...newCol, type: e.target.value})} className="border border-green-300 rounded p-1.5 text-sm">
-              <option value="checkbox">Checkbox</option><option value="date">Date</option>
-            </select>
-            <select value={newCol.appliesTo} onChange={e=>setNewCol({...newCol, appliesTo: e.target.value})} className="border border-green-300 rounded p-1.5 text-sm flex-1">
-              <option value="onsigner">Onsigner Only</option><option value="offsigner">Offsigner Only</option><option value="both">Both</option>
-            </select>
-            <button onClick={addColumn} disabled={!newCol.name} className="bg-green-600 text-white px-4 py-1.5 rounded font-bold text-sm disabled:opacity-50">Add Column</button>
-         </div>
+        <div className="flex gap-3 items-center bg-green-50 p-3 rounded-lg border border-green-200">
+           <input type="text" placeholder="New Column Name" value={newCol.name} onChange={e=>setNewCol({...newCol, name: e.target.value})} className="border border-green-300 rounded p-1.5 text-sm w-40"/>
+           <select value={newCol.type} onChange={e=>setNewCol({...newCol, type: e.target.value})} className="border border-green-300 rounded p-1.5 text-sm">
+             <option value="checkbox">Checkbox</option><option value="date">Date</option>
+           </select>
+           <select value={newCol.appliesTo} onChange={e=>setNewCol({...newCol, appliesTo: e.target.value})} className="border border-green-300 rounded p-1.5 text-sm flex-1">
+             <option value="onsigner">Onsigner Only</option><option value="offsigner">Offsigner Only</option><option value="both">Both</option>
+           </select>
+           <button onClick={addColumn} disabled={!newCol.name} className="bg-green-600 text-white px-4 py-1.5 rounded font-bold text-sm disabled:opacity-50">Add Column</button>
+        </div>
       </div>
 
-      {/* 5. PROMOTION & RECRUITMENT MATRIX */}
+      {/* 4. PROMOTION & RECRUITMENT MATRIX */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
         <h2 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><Briefcase size={20} className="text-purple-500"/> Promotion & Recruitment Matrix</h2>
         <p className="text-sm text-slate-500 mb-4 bg-slate-50 p-3 rounded border border-slate-100">Define the approval steps for promotions and recruitment for each rank. Only users with the matching 'Job Title' can evaluate that step.</p>
@@ -2117,36 +2094,36 @@ function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, promoMatri
               <tr><th className="p-3 font-semibold w-48">Rank</th><th className="p-3 font-semibold">Approval Steps (in order)</th><th className="p-3 text-right"></th></tr>
             </thead>
             <tbody>
-              {(promoMatrix || []).map((pm, i) => (
+              {(promoMatrix||[]).map((pm, i) => (
                 <tr key={pm.id} className="border-b border-slate-100 hover:bg-slate-50/50">
                   <td className="p-3 font-bold text-slate-800">{pm.rank}</td>
                   <td className="p-3 flex gap-2 flex-wrap items-center">
                     {pm.steps.map((stepRole, j) => (
                       <span key={j} className="bg-purple-100 text-purple-800 text-[11px] font-bold px-2 py-1 rounded border border-purple-200 flex items-center gap-1">
                         {j+1}. {stepRole} 
-                        <button onClick={() => {
+                        <button onClick={()=>{
                            const nm = [...promoMatrix]; nm[i].steps.splice(j,1); setPromoMatrix(nm);
                         }} className="hover:text-red-500 ml-1"><X size={10}/></button>
                       </span>
                     ))}
                     <div className="flex items-center ml-2 border border-purple-200 rounded overflow-hidden">
                       <input list="jobTitlesList" id={`promo-step-${i}`} placeholder="Role..." className="text-xs p-1 outline-none bg-white border-none w-28"/>
-                      <button onClick={() => {
+                      <button onClick={()=>{
                          const el = document.getElementById(`promo-step-${i}`);
-                         if(el && el.value) { const nm = [...promoMatrix]; nm[i].steps.push(el.value); setPromoMatrix(nm); el.value = ''; }
+                         if(el.value) { const nm = [...promoMatrix]; nm[i].steps.push(el.value); setPromoMatrix(nm); el.value = ''; }
                       }} className="bg-purple-50 hover:bg-purple-100 text-purple-700 px-2 py-1 font-bold text-xs border-l border-purple-200">+</button>
                     </div>
                   </td>
                   <td className="p-3 text-right">
-                    <button onClick={() => setPromoMatrix(promoMatrix.filter(x => x.id !== pm.id))} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
+                    <button onClick={()=>setPromoMatrix(promoMatrix.filter(x=>x.id!==pm.id))} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
                   </td>
                 </tr>
               ))}
               <tr className="bg-purple-50/50">
                 <td className="p-3">
-                  <select value={newPromoRow.rank} onChange={e => setNewPromoRow({...newPromoRow, rank: e.target.value})} className="w-full border border-purple-200 rounded p-1.5 text-sm bg-white outline-none">
+                  <select value={newPromoRow.rank} onChange={e=>setNewPromoRow({...newPromoRow, rank: e.target.value})} className="w-full border border-purple-200 rounded p-1.5 text-sm bg-white outline-none">
                      <option value="">Select Rank</option>
-                     {(matrix||[]).map(m => <option key={m.id} value={m.rank}>{m.rank}</option>)}
+                     {matrix.map(m => <option key={m.id} value={m.rank}>{m.rank}</option>)}
                   </select>
                 </td>
                 <td className="p-3">
@@ -2160,59 +2137,205 @@ function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, promoMatri
           </table>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* 6. DEBRIEFING MATRIX */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-        <h2 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><UserCheck size={20} className="text-teal-500"/> Debriefing Departments & Access</h2>
-        <p className="text-sm text-slate-500 mb-4 bg-slate-50 p-3 rounded border border-slate-100">Define departments for Debriefings (e.g. Deck, Marine, Procurement) and select which Job Titles are authorized to evaluate them.</p>
+function CrewFormModal({ matrix, crewMember, onClose, onConfirm }) {
+  const isEdit = !!crewMember;
+  const [name, setName] = useState(crewMember?.name || '');
+  const [competency, setCompetency] = useState(crewMember?.competency || '');
+  const [readiness, setReadiness] = useState(crewMember?.readinessDate || '');
+
+  const allComps = useMemo(() => {
+    const set = new Set();
+    (matrix || []).forEach(m => (m.competencies || []).forEach(c => set.add(c)));
+    return Array.from(set);
+  }, [matrix]);
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+        <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+            {isEdit ? <Edit2 size={20} className="text-blue-500"/> : <UserPlus size={20} className="text-blue-500"/>}
+            {isEdit ? 'Edit Crew Details' : 'Add New Crew'}
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 bg-white p-1 rounded shadow-sm border border-slate-200"><X size={18}/></button>
+        </div>
         
-        <div className="overflow-x-auto mb-4">
-          <table className="w-full text-sm text-left border border-slate-200 rounded-lg whitespace-nowrap bg-white">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
-              <tr><th className="p-3 font-semibold w-48">Department Name</th><th className="p-3 font-semibold">Allowed Evaluators (Job Titles)</th><th className="p-3 text-right"></th></tr>
-            </thead>
-            <tbody>
-              {(debriefMatrix||[]).map((dm, i) => (
-                <tr key={dm.id} className="border-b border-slate-100 hover:bg-slate-50/50">
-                  <td className="p-3 font-bold text-slate-800">{dm.name}</td>
-                  <td className="p-3 flex gap-2 flex-wrap items-center">
-                    {(dm.allowedRoles||[]).map((role, j) => (
-                      <span key={j} className="bg-teal-100 text-teal-800 text-[11px] font-bold px-2 py-1 rounded border border-teal-200 flex items-center gap-1">
-                        {role} 
-                        <button onClick={()=>{
-                           const nm = [...debriefMatrix]; nm[i].allowedRoles.splice(j,1); setDebriefMatrix(nm);
-                        }} className="hover:text-red-500 ml-1"><X size={10}/></button>
-                      </span>
-                    ))}
-                    <div className="flex items-center ml-2 border border-teal-200 rounded overflow-hidden">
-                      <input list="jobTitlesList" id={`debrief-role-${i}`} placeholder="Add role..." className="text-xs p-1 outline-none bg-white border-none w-28"/>
-                      <button onClick={()=>{
-                         const el = document.getElementById(`debrief-role-${i}`);
-                         if(el && el.value) { const nm = [...debriefMatrix]; nm[i].allowedRoles.push(el.value); setDebriefMatrix(nm); el.value = ''; }
-                      }} className="bg-teal-50 hover:bg-teal-100 text-teal-700 px-2 py-1 font-bold text-xs border-l border-teal-200">+</button>
-                    </div>
-                  </td>
-                  <td className="p-3 text-right">
-                    <button onClick={()=>setDebriefMatrix(debriefMatrix.filter(x=>x.id!==dm.id))} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
-                  </td>
-                </tr>
-              ))}
-              <tr className="bg-teal-50/50">
-                <td className="p-3">
-                  <input type="text" placeholder="e.g. Procurement" value={newDebriefRow.name} onChange={e=>setNewDebriefRow({...newDebriefRow, name: e.target.value})} className="w-full border border-teal-200 rounded p-1.5 text-sm bg-white outline-none"/>
-                </td>
-                <td className="p-3">
-                  <span className="text-xs text-teal-500 italic">Add department first, then add authorized roles.</span>
-                </td>
-                <td className="p-3 text-right">
-                  <button onClick={addDebriefRow} disabled={!newDebriefRow.name} className="bg-teal-600 text-white px-3 py-1.5 rounded text-sm font-bold disabled:opacity-50">Add Dept</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
+            <input type="text" className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Ahmet Yılmaz"/>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Competency (License)</label>
+            <select className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-white" value={competency} onChange={e=>setCompetency(e.target.value)}>
+              <option value="">-- Select Competency --</option>
+              {allComps.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Readiness Date (Optional)</label>
+            <input type="date" className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" value={readiness} onChange={e=>setReadiness(e.target.value)}/>
+          </div>
+        </div>
+        
+        <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors">Cancel</button>
+          <button 
+            disabled={!name || !competency}
+            onClick={() => onConfirm({ name, competency, readinessDate: readiness })} 
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+          >
+            {isEdit ? 'Save Changes' : 'Add to Pool'}
+          </button>
         </div>
       </div>
+    </div>
+  );
+}
 
+function DeleteConfirmModal({ message, showConfirm, onClose, onConfirm }) {
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[70] p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden p-6 text-center">
+        <AlertTriangle size={48} className="mx-auto text-red-500 mb-4" />
+        <h3 className="text-lg font-bold text-slate-800 mb-2">{showConfirm ? 'Confirm Deletion' : 'Cannot Delete'}</h3>
+        <p className="text-sm text-slate-600 mb-6">{message}</p>
+        <div className="flex justify-center gap-3">
+           <button onClick={onClose} className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg font-bold text-sm">Close</button>
+           {showConfirm && (
+             <button onClick={onConfirm} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-sm">Yes, Delete</button>
+           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NotesModal({ isOpen, name, notes, currentUser, onClose, onAdd, onDelete }) {
+  const [text, setText] = useState('');
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-[70] p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md flex flex-col h-[500px]">
+        <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-xl shrink-0">
+          <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 truncate pr-2"><MessageCircle size={20} className="text-blue-500 shrink-0"/> Notes: {name}</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 shrink-0"><X size={20} /></button>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-100/50">
+          {notes?.length === 0 ? <p className="text-center text-slate-400 text-sm mt-10">No notes yet.</p> : 
+            notes.map((n, i) => (
+              <div key={n.id || i} className="bg-white p-3 rounded-lg shadow-sm border border-slate-100 group relative">
+                <p className="text-slate-700 text-sm whitespace-pre-wrap">{n.text}</p>
+                <div className="flex justify-between items-center mt-2 text-[10px] text-slate-400 font-medium border-t border-slate-50 pt-2">
+                  <span>{n.author}</span>
+                  <span>{new Date(n.date).toLocaleString()}</span>
+                </div>
+                {currentUser.role === 'admin' && (
+                  <button onClick={()=>onDelete(n.id)} className="absolute top-2 right-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity bg-white"><Trash2 size={14}/></button>
+                )}
+              </div>
+            ))
+          }
+        </div>
+        
+        {currentUser.role !== 'viewer' && (
+          <div className="p-4 border-t border-slate-200 bg-white rounded-b-xl flex gap-2 shrink-0">
+            <input 
+              type="text" placeholder="Type a note..." 
+              className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              value={text} onChange={e=>setText(e.target.value)}
+              onKeyDown={e => { if(e.key==='Enter' && text) { onAdd(text); setText(''); } }}
+            />
+            <button disabled={!text} onClick={() => { onAdd(text); setText(''); }} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors">Add</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Login({ users, onLogin, isDbEmpty, onSeed }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [seeding, setSeeding] = useState(false);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const user = users.find(u => u.username === username && u.password === password);
+    if (user) {
+      onLogin(user);
+    } else {
+      setError('Invalid username or password.');
+    }
+  };
+
+  const handleInitialize = async () => {
+    setSeeding(true);
+    try {
+      const result = await onSeed();
+      if (result && !result.success) {
+        setError(`Database Initialization Failed: ${result.error}. Please check your Firebase Firestore Security Rules and enable Anonymous Authentication.`);
+      }
+    } catch (err) {
+      setError(`Unexpected Error: ${err.message}`);
+    }
+    setSeeding(false);
+  };
+
+  return (
+    <div className="flex h-screen bg-[#0f172a] items-center justify-center font-sans text-slate-800 p-4">
+      <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-100">
+        <div className="flex flex-col items-center mb-8">
+          <div className="bg-[#0f172a] p-3.5 rounded-2xl mb-4 shadow-lg shadow-slate-900/30">
+             <ArmonaLogo className="w-10 h-10" />
+          </div>
+          <h1 className="text-2xl font-black text-slate-800 tracking-wide text-center">ARMONA CREW MANAGER</h1>
+          <p className="text-slate-500 text-sm mt-1.5 font-medium">Please sign in to your account</p>
+        </div>
+
+        {isDbEmpty ? (
+           <div className="space-y-4 text-center">
+              <div className="bg-amber-50 text-amber-700 p-4 rounded-lg border border-amber-200 text-sm">
+                 <AlertTriangle size={24} className="mx-auto mb-2 text-amber-500"/>
+                 <strong>Database is empty!</strong><br/>
+                 Click the button below to initialize the default Admin account and configuration.
+              </div>
+              
+              {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-xs font-medium border border-red-200 text-left">{error}</div>}
+
+              <button onClick={handleInitialize} disabled={seeding} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition-colors shadow-sm disabled:opacity-50">
+                 {seeding ? 'Initializing Database...' : 'Initialize First Run Data'}
+              </button>
+           </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-medium border border-red-200 flex items-center justify-center gap-2"><AlertTriangle size={16}/> {error}</div>}
+            
+            <div>
+              <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Username</label>
+              <input type="text" value={username} onChange={e=>setUsername(e.target.value)} className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all bg-slate-50 focus:bg-white font-medium" required />
+            </div>
+            
+            <div>
+              <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Password</label>
+              <input type="password" value={password} onChange={e=>setPassword(e.target.value)} className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all bg-slate-50 focus:bg-white font-medium" required />
+            </div>
+
+            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-3 rounded-lg transition-colors mt-2 shadow-sm">Secure Sign In</button>
+          </form>
+        )}
+        
+        <div className="mt-8 text-center text-xs text-slate-400 font-medium">
+          Custom Crewing Software <br/> designed by Batuhan Tas
+        </div>
+      </div>
     </div>
   );
 }
@@ -2302,7 +2425,7 @@ function PromotionsRecruitment({ promotions, matrix, ranks, currentUser, onAdd, 
              <button onClick={() => setTab('active')} className={`px-4 py-1 rounded transition-colors ${tab==='active'?'bg-white shadow text-slate-800':'text-slate-500 hover:text-slate-700'}`}>Active</button>
              <button onClick={() => setTab('archived')} className={`px-4 py-1 rounded transition-colors ${tab==='archived'?'bg-white shadow text-slate-800':'text-slate-500 hover:text-slate-700'}`}>Archived</button>
            </div>
-           {['admin', 'crewing'].includes(currentUser.role) && tab === 'active' && (
+           {currentUser.role !== 'viewer' && tab === 'active' && (
              <button onClick={() => setAddModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm font-bold shadow-sm flex items-center gap-1 transition-colors"><Plus size={16}/> New Candidate</button>
            )}
         </div>
@@ -2363,11 +2486,11 @@ function PromotionsRecruitment({ promotions, matrix, ranks, currentUser, onAdd, 
                            {tab === 'active' && currentUser.role !== 'viewer' ? (
                               <div className="flex gap-2">
                                 <button onClick={() => setEditModal(p)} className="bg-white hover:bg-slate-50 text-blue-600 px-3 py-1.5 rounded border border-slate-200 font-bold text-xs shadow-sm transition-colors">Evaluate</button>
-                                {['admin', 'crewing'].includes(currentUser.role) && (
-                                  <button onClick={() => onUpdate(p.id, 'status', 'archived')} className="bg-white hover:bg-slate-50 text-emerald-600 px-3 py-1.5 rounded border border-slate-200 font-bold text-xs shadow-sm transition-colors" title="Complete Process">Complete</button>
-                                )}
                                 {currentUser.role === 'admin' && (
-                                  <button onClick={() => setDeleteConfirmId(p.id)} className="bg-white hover:bg-slate-50 text-slate-400 hover:text-red-500 px-2 py-1.5 rounded border border-slate-200 transition-colors shadow-sm"><Trash2 size={16}/></button>
+                                  <>
+                                    <button onClick={() => onUpdate(p.id, 'status', 'archived')} className="bg-white hover:bg-slate-50 text-emerald-600 px-3 py-1.5 rounded border border-slate-200 font-bold text-xs shadow-sm transition-colors" title="Complete Process">Complete</button>
+                                    <button onClick={() => setDeleteConfirmId(p.id)} className="bg-white hover:bg-slate-50 text-slate-400 hover:text-red-500 px-2 py-1.5 rounded border border-slate-200 transition-colors shadow-sm"><Trash2 size={16}/></button>
+                                  </>
                                 )}
                               </div>
                            ) : (
