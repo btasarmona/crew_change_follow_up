@@ -390,6 +390,17 @@ export default function App() {
               onAddCrew={() => setCrewFormModal({ isOpen: true, crew: null })}
               onEditCrew={(c) => setCrewFormModal({ isOpen: true, crew: c })}
               onDeleteCrew={attemptDeleteCrew}
+              onOpenPoolOverview={() => setActiveTab('pool_overview')}
+            />
+          )}
+          {activeTab === 'pool_overview' && (
+            <PoolOverview 
+              crew={crew.filter(c => c.status === 'onleave')} 
+              matrix={matrix} 
+              today={today} 
+              currentUser={currentUser}
+              onBack={() => setActiveTab('dashboard')}
+              onUpdateReadiness={async (id, date) => await updateDoc(doc(db, getPath('crew'), id), { readinessDate: date })}
             />
           )}
           {['admin', 'crewing'].includes(currentUser.role) && activeTab === 'procedures' && (
@@ -596,7 +607,8 @@ function TopNavItem({ icon, label, active, onClick, badge }) {
   );
 }
 
-function Dashboard({ ships, crew, matrix, currentUser, today, onOpenLineup, onOpenNotes, onAssign, onAddCrew, onEditCrew, onDeleteCrew }) {
+function Dashboard({ ships, crew, matrix, currentUser, today, onOpenLineup, onOpenNotes, onAssign, onAddCrew, onEditCrew, onDeleteCrew, onOpenPoolOverview }) {
+
   const expiredContracts = crew.filter(c => c.status === 'onboard' && c.contractEnd && new Date(c.contractEnd).getTime() < today.getTime());
   
   const opAlerts = ships.map(s => {
@@ -716,10 +728,13 @@ function Dashboard({ ships, crew, matrix, currentUser, today, onOpenLineup, onOp
         <div className="w-full xl:w-1/4 xl:sticky xl:top-0">
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-[500px] xl:h-[700px]">
             <div className="p-4 border-b border-slate-100 flex flex-col gap-3 bg-white rounded-t-xl shrink-0">
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center w-full">
                 <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                   <div className="text-blue-500"><Users size={20} /></div> Crew Pool
                 </h2>
+                <button onClick={onOpenPoolOverview} className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 bg-blue-50 px-2 py-1 rounded border border-blue-100 transition-colors">
+                  Pool Overview <ChevronRight size={14}/>
+                </button>
               </div>
               <div className="relative">
                 <Search className="absolute left-2.5 top-2 text-slate-400" size={16} />
@@ -2775,6 +2790,141 @@ function DeleteConfirmModal({ message, showConfirm, onClose, onConfirm }) {
            {showConfirm && (
              <button onClick={onConfirm} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-sm">Yes, Delete</button>
            )}
+        </div>
+      </div>
+    </div>
+  );
+}
+function PoolOverview({ crew, matrix, today, currentUser, onBack, onUpdateReadiness }) {
+  const [filterRank, setFilterRank] = useState('');
+
+  const groupedPool = useMemo(() => {
+    const groups = [];
+    (matrix || []).forEach(m => {
+      if (filterRank && m.rank !== filterRank) return;
+      const members = crew.filter(c => c.rank === m.rank);
+      if (members.length > 0) {
+        members.sort((a,b) => {
+          const tA = a.readinessDate ? new Date(a.readinessDate).getTime() : Infinity;
+          const tB = b.readinessDate ? new Date(b.readinessDate).getTime() : Infinity;
+          return tA - tB;
+        });
+        groups.push({ matrix: m, members });
+      }
+    });
+    return groups;
+  }, [crew, matrix, filterRank]);
+
+  // Bugünden 2 ay öncesi ile 6 ay sonrası arasında bir Gantt (Timeline)
+  const timelineStart = new Date(today); timelineStart.setMonth(timelineStart.getMonth() - 2);
+  const timelineEnd = new Date(today); timelineEnd.setMonth(timelineEnd.getMonth() + 6);
+  const totalDays = (timelineEnd.getTime() - timelineStart.getTime()) / (1000*60*60*24);
+
+  const monthHeaders = [];
+  let tempDate = new Date(timelineStart);
+  tempDate.setDate(1); 
+  while(tempDate.getTime() <= timelineEnd.getTime()) {
+    monthHeaders.push(tempDate.toLocaleString('en-US', { month: 'short', year: 'numeric' }));
+    tempDate.setMonth(tempDate.getMonth() + 1);
+  }
+
+  // Bloklar 30 günlük çizilir
+  const getBarStyle = (readinessDate) => {
+    if (!readinessDate) return { display: 'none' };
+    const sDate = new Date(readinessDate); 
+    const eDate = new Date(sDate.getTime() + (30 * 24 * 60 * 60 * 1000));
+    let leftPct = ((sDate.getTime() - timelineStart.getTime()) / (1000*60*60*24)) / totalDays * 100;
+    let widthPct = ((eDate.getTime() - sDate.getTime()) / (1000*60*60*24)) / totalDays * 100;
+    
+    if (leftPct < 0) { widthPct += leftPct; leftPct = 0; }
+    if (leftPct + widthPct > 100) widthPct = 100 - leftPct;
+    if (widthPct < 0 || leftPct > 100) return { display: 'none' };
+
+    return {
+      left: `${leftPct}%`, width: `${widthPct}%`,
+      background: '#3b82f6', // blue-500
+      position: 'absolute', height: '16px', top: '4px', borderRadius: '4px',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: '4px',
+      opacity: 0.8
+    };
+  };
+
+  const canEdit = ['admin', 'crewing'].includes(currentUser.role);
+
+  return (
+    <div className="space-y-4 h-full flex flex-col">
+      <div className="flex flex-wrap gap-4 justify-between items-end shrink-0">
+        <div>
+          <button onClick={onBack} className="text-sm font-bold text-slate-500 hover:text-blue-600 flex items-center gap-1 mb-1 transition-colors"><ChevronRight size={14} className="rotate-180"/> Back to Dashboard</button>
+          <h1 className="text-2xl font-bold text-slate-800">Crew Pool Overview</h1>
+        </div>
+        <div className="bg-white p-2 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3">
+          <label className="text-sm font-medium text-slate-500">Filter by Rank:</label>
+          <select className="border border-slate-300 rounded text-sm p-1.5 focus:outline-none w-40 bg-slate-50" value={filterRank} onChange={e=>setFilterRank(e.target.value)}>
+             <option value="">All Ranks</option>
+             {(matrix||[]).map(m => <option key={m.id} value={m.rank}>{m.rank}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 overflow-hidden flex flex-col relative">
+        <div className="min-w-[900px] flex-1 flex flex-col h-full">
+          {/* Header Row */}
+          <div className="flex border-b border-slate-200 bg-slate-50 sticky top-0 z-30 shadow-sm shrink-0">
+            <div className="w-[40%] md:w-[35%] shrink-0 p-3 text-xs font-bold text-slate-700 border-r border-slate-200 flex items-center">
+              Personnel Info & Readiness Date
+            </div>
+            <div className="w-[60%] md:w-[65%] relative flex">
+              {monthHeaders.map((m, i) => (
+                <div key={i} className="flex-1 border-l border-slate-200 border-dashed text-center py-2 text-[10px] font-bold text-blue-800">
+                  {m}
+                </div>
+              ))}
+              <div className="absolute top-0 bottom-0 border-l-2 border-red-400 z-10" style={{left: `${((today.getTime() - timelineStart.getTime()) / (1000*60*60*24)) / totalDays * 100}%`}}></div>
+            </div>
+          </div>
+
+          {/* Data Rows */}
+          <div className="p-2 space-y-2 overflow-y-auto flex-1 bg-slate-50/50">
+            {groupedPool.map((group, gIdx) => (
+              <div key={gIdx} className="border border-slate-300 rounded overflow-hidden shadow-sm bg-white">
+                {group.members.map((c, mIdx) => {
+                  const showInnerBorder = mIdx !== group.members.length - 1;
+                  const rowClass = showInnerBorder ? 'border-b border-slate-200' : '';
+
+                  return (
+                    <div key={c.id} className={`flex items-stretch text-xs bg-white relative group h-8 ${rowClass}`}>
+                      <div className="w-[40%] md:w-[35%] shrink-0 px-2 border-r border-slate-200 flex items-center justify-between min-w-0">
+                        <div className="flex items-center min-w-0 flex-1 pr-2">
+                           <span className="font-bold text-blue-600 w-20 shrink-0 truncate mr-2" title={c.rank}>{c.rank}</span>
+                           <span className="font-bold text-slate-800 truncate" title={c.name}>{c.name}</span>
+                        </div>
+                        <input 
+                           type="date" 
+                           className="border border-slate-300 rounded p-1 text-[10px] text-slate-600 outline-none focus:border-blue-500 shrink-0 disabled:bg-transparent disabled:border-transparent disabled:cursor-not-allowed"
+                           value={c.readinessDate || ''}
+                           disabled={!canEdit}
+                           onChange={(e) => onUpdateReadiness(c.id, e.target.value)}
+                        />
+                      </div>
+                      
+                      <div className="w-[60%] md:w-[65%] relative bg-slate-50/30">
+                        {monthHeaders.map((_, i) => (
+                          <div key={i} className="absolute top-0 bottom-0 border-l border-slate-200 border-dashed" style={{left: `${(i / monthHeaders.length) * 100}%`}}></div>
+                        ))}
+                        <div className="absolute top-0 bottom-0 border-l-2 border-red-400/20 z-0" style={{left: `${((today.getTime() - timelineStart.getTime()) / (1000*60*60*24)) / totalDays * 100}%`}}></div>
+                        
+                        <div style={getBarStyle(c.readinessDate)} className="z-10 group-hover:brightness-95 transition-all" title={c.readinessDate ? `Ready: ${c.readinessDate} (30 Days block)` : 'Not Set'}>
+                           <span className="text-[9px] font-bold text-white px-1 truncate">READY</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+            {groupedPool.length === 0 && <div className="text-center text-slate-400 py-10">No personnel found in the pool.</div>}
+          </div>
         </div>
       </div>
     </div>
