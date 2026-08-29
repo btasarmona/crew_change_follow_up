@@ -352,14 +352,12 @@ export default function App() {
         </div>
         
         <nav className="flex-1 flex justify-center items-center gap-2 overflow-x-auto mx-4">
-          <TopNavItem icon={<Monitor />} label="Fleet Overview" active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} />
           <TopNavItem icon={<LayoutDashboard />} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-          {currentUser.role !== 'viewer' && <TopNavItem icon={<FileCheck />} label="Procedures" active={activeTab === 'procedures'} onClick={() => setActiveTab('procedures')} />}
+          <TopNavItem icon={<Monitor />} label="Fleet Overview" active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} />
+          {['admin', 'crewing'].includes(currentUser.role) && <TopNavItem icon={<FileCheck />} label="Procedures" active={activeTab === 'procedures'} onClick={() => setActiveTab('procedures')} />}
           <TopNavItem icon={<Star />} label="Eval Overview" active={activeTab === 'eval_overview'} onClick={() => setActiveTab('eval_overview')} />
-          {currentUser.role !== 'viewer' && <TopNavItem icon={<Plus />} label="Add Eval" active={activeTab === 'eval_add'} onClick={() => setActiveTab('eval_add')} />}
+          {['admin', 'crewing'].includes(currentUser.role) && <TopNavItem icon={<Plus />} label="Add Eval" active={activeTab === 'eval_add'} onClick={() => setActiveTab('eval_add')} />}
           <TopNavItem icon={<UserCheck />} label="Debriefings" active={activeTab === 'debriefings'} onClick={() => setActiveTab('debriefings')} badge={activeDebriefsCount} />
-          <TopNavItem icon={<Briefcase />} label="Promo & Recruit" active={activeTab === 'promotions'} onClick={() => setActiveTab('promotions')} />
-          {currentUser.role === 'admin' && <TopNavItem icon={<Settings />} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />}        </nav>
 
         <div className="flex items-center gap-4 border-l border-slate-700 pl-6 shrink-0">
           <div className="flex items-center gap-2 text-sm text-slate-300">
@@ -744,7 +742,7 @@ function Dashboard({ ships, crew, matrix, currentUser, today, onOpenLineup, onOp
                       <div className="text-xs text-slate-500 mb-1 truncate" title={c.competency}>{c.competency}</div>
                       <div className="text-[10px] text-slate-400">Readiness: <span className="text-slate-700">{c.readinessDate || 'TBA'}</span></div>
                     </div>
-                    {currentUser.role !== 'viewer' && (
+                    {['admin', 'crewing'].includes(currentUser.role) && (
                       <div className="flex flex-col gap-1 items-end shrink-0">
                          <button onClick={() => onAssign(c)} className="bg-blue-50 hover:bg-blue-100 text-blue-600 px-2 py-0.5 rounded text-[10px] font-bold transition-colors border border-blue-100 w-full text-center">Assign</button>
                          <div className="flex gap-1">
@@ -759,7 +757,7 @@ function Dashboard({ ships, crew, matrix, currentUser, today, onOpenLineup, onOp
               {pool.length === 0 && <div className="text-center text-slate-400 text-sm mt-10">No crew on leave.</div>}
             </div>
             
-            {currentUser.role !== 'viewer' && (
+            {['admin', 'crewing'].includes(currentUser.role) && (
               <div className="p-3 bg-white border-t border-slate-100 rounded-b-xl shrink-0">
                 <button onClick={onAddCrew} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-sm">
                   <UserPlus size={16}/> Add New Crew
@@ -885,7 +883,7 @@ function LineupModal({ ship, crew, matrix, currentUser, today, getDaysBetween, o
                         <div className="w-[30%] md:w-[25%] shrink-0 px-2 border-r border-slate-200 flex items-center min-w-0">
                           <span className="font-bold text-blue-600 w-16 shrink-0 truncate mr-1" title={c.rank}>{c.rank}</span>
                           <span className="font-bold text-slate-800 truncate mr-1" title={c.name}>{c.name}</span>
-                          <div className="flex items-center gap-1 shrink-0 ml-auto">
+                              <div className="flex items-center gap-1 shrink-0 ml-auto">
                               <button onClick={() => onNotes(c.id, c.name)} className="text-slate-300 hover:text-slate-500" title="Notes"><MessageCircle size={14}/></button>
                               {c.notes?.length > 0 && <span className="text-[9px] text-red-500 font-bold">{c.notes.length}</span>}
                               {currentUser.role !== 'viewer' && (
@@ -904,7 +902,7 @@ function LineupModal({ ship, crew, matrix, currentUser, today, getDaysBetween, o
                              {isPlanned && <span className="text-[9px] font-bold text-green-600 bg-white px-1 rounded">PLANNED</span>}
                           </div>
 
-                          {currentUser.role !== 'viewer' && (
+                          {['admin', 'crewing'].includes(currentUser.role) && (
                              <div className="absolute z-20 flex items-center opacity-0 group-hover:opacity-100 transition-opacity" style={{left: `${endPct}%`, top: '2px'}}>
                                <button onClick={() => onEditContract(c)} className="bg-white border border-slate-200 text-slate-400 hover:text-blue-500 p-0.5 rounded-full shadow-sm translate-x-1" title="Extend / Edit Contract">
                                  <ChevronRight size={14}/>
@@ -1601,12 +1599,15 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelet
                       {tab === 'active' && currentUser.role !== 'viewer' ? (
                         <div className="flex justify-end items-center gap-2">
                            <button onClick={() => setEditModal(d)} className="text-blue-600 hover:bg-blue-50 px-2 py-1 rounded border border-blue-200 font-medium text-xs">Edit / Fill</button>
-                           <button onClick={() => onUpdate(d.id, 'status', 'archived')} className="text-emerald-600 hover:bg-emerald-50 px-2 py-1 rounded border border-emerald-200 font-medium text-xs">Complete</button>
+                           {['admin', 'crewing'].includes(currentUser.role) && (
+                             <button onClick={() => onUpdate(d.id, 'status', 'archived')} className="text-emerald-600 hover:bg-emerald-50 px-2 py-1 rounded border border-emerald-200 font-medium text-xs">Complete</button>
+                           )}
                            {currentUser.role === 'admin' && (
                              <button onClick={() => setDeleteConfirmId(d.id)} className="text-slate-400 hover:text-red-500 p-1" title="Delete"><Trash2 size={16}/></button>
                            )}
                         </div>
                       ) : (
+
                         <div className="flex justify-end items-center">
                            {currentUser.role === 'admin' && (
                              <button onClick={() => onUpdate(d.id, 'status', 'active')} title="Restore to Active" className="text-slate-400 hover:text-blue-500 flex items-center gap-1 text-xs font-medium"><RotateCcw size={14}/> Restore</button>
@@ -1649,37 +1650,48 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelet
                <div className="flex gap-4">
                   <div className="flex-1">
                     <label className="block text-xs font-bold text-slate-500 mb-1">Debrief Start Date</label>
-                    <input type="date" value={editModal.startDate} onChange={e=>setEditModal({...editModal, startDate: e.target.value})} className="w-full border border-slate-300 rounded p-1.5 text-sm outline-none bg-white"/>
+                    <input type="date" disabled={!['admin', 'crewing'].includes(currentUser.role)} value={editModal.startDate} onChange={e=>setEditModal({...editModal, startDate: e.target.value})} className="w-full border border-slate-300 rounded p-1.5 text-sm outline-none bg-white disabled:bg-slate-100 disabled:cursor-not-allowed"/>
                   </div>
                   <div className="flex-1">
                     <label className="block text-xs font-bold text-slate-500 mb-1">Debrief End Date</label>
-                    <input type="date" value={editModal.endDate} onChange={e=>setEditModal({...editModal, endDate: e.target.value})} className="w-full border border-slate-300 rounded p-1.5 text-sm outline-none bg-white"/>
+                    <input type="date" disabled={!['admin', 'crewing'].includes(currentUser.role)} value={editModal.endDate} onChange={e=>setEditModal({...editModal, endDate: e.target.value})} className="w-full border border-slate-300 rounded p-1.5 text-sm outline-none bg-white disabled:bg-slate-100 disabled:cursor-not-allowed"/>
                   </div>
                </div>
                
                <div className="space-y-3">
-                 {editModal.depts.map((dept, idx) => (
-                   <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex gap-3 items-start">
-                     <div className="w-24 shrink-0 font-bold text-slate-700 text-sm mt-1">{dept.name}</div>
-                     <textarea 
-                       placeholder="Enter detailed notes..." 
-                       value={dept.note} onChange={e=>{
-                         const newDepts = [...editModal.depts]; newDepts[idx].note = e.target.value; setEditModal({...editModal, depts: newDepts});
-                       }} 
-                       className="flex-1 border border-slate-300 rounded p-2 text-sm resize-none focus:outline-none focus:border-blue-500 h-16 bg-slate-50"
-                     />
-                     <div className="w-20 shrink-0">
-                       <input 
-                         type="number" placeholder="Score" max="100" min="0" 
-                         value={dept.score} onChange={e=>{
-                           const newDepts = [...editModal.depts]; newDepts[idx].score = e.target.value; setEditModal({...editModal, depts: newDepts});
+                 {editModal.depts.map((dept, idx) => {
+                   const isAdminOrCTO = currentUser.role === 'admin' || currentUser.jobTitle === 'CTO';
+                   const canEdit = isAdminOrCTO || 
+                     (dept.name === 'Deck' && ['Marine S.I.', 'Marine Manager'].includes(currentUser.jobTitle)) ||
+                     (dept.name === 'Engine' && ['Tech S.I.', 'Tech. Manager'].includes(currentUser.jobTitle)) ||
+                     (dept.name === 'Safety' && currentUser.jobTitle === 'DPA') ||
+                     (dept.name === 'HR' && ['Crew Manager', 'Welfare Officer', 'Crewing S.I.'].includes(currentUser.jobTitle));
+
+                   return (
+                     <div key={idx} className={`bg-white p-3 rounded-lg border shadow-sm flex gap-3 items-start ${canEdit ? 'border-blue-200' : 'border-slate-200 opacity-80'}`}>
+                       <div className="w-24 shrink-0 font-bold text-slate-700 text-sm mt-1">{dept.name}</div>
+                       <textarea 
+                         disabled={!canEdit}
+                         placeholder={canEdit ? "Enter detailed notes..." : "Read only..."}
+                         value={dept.note} onChange={e=>{
+                           const newDepts = [...editModal.depts]; newDepts[idx].note = e.target.value; setEditModal({...editModal, depts: newDepts});
                          }} 
-                         className="w-full border border-slate-300 rounded p-2 text-sm font-bold text-blue-600 focus:outline-none focus:border-blue-500 text-center bg-slate-50"
+                         className="flex-1 border border-slate-300 rounded p-2 text-sm resize-none focus:outline-none focus:border-blue-500 h-16 bg-slate-50 disabled:bg-slate-100"
                        />
-                       <div className="text-center text-[10px] text-slate-400 mt-1">out of 100</div>
+                       <div className="w-20 shrink-0">
+                         <input 
+                           disabled={!canEdit}
+                           type="number" placeholder="Score" max="100" min="0" 
+                           value={dept.score} onChange={e=>{
+                             const newDepts = [...editModal.depts]; newDepts[idx].score = e.target.value; setEditModal({...editModal, depts: newDepts});
+                           }} 
+                           className="w-full border border-slate-300 rounded p-2 text-sm font-bold text-blue-600 focus:outline-none focus:border-blue-500 text-center bg-slate-50 disabled:bg-slate-100"
+                         />
+                         <div className="text-center text-[10px] text-slate-400 mt-1">out of 100</div>
+                       </div>
                      </div>
-                   </div>
-                 ))}
+                   );
+                 })}
                </div>
             </div>
             
@@ -1872,11 +1884,12 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelet
                       {isEditing ? (
                         <select value={editUserData.role} onChange={e=>setEditUserData({...editUserData, role: e.target.value})} className="border border-blue-400 rounded p-1.5 text-xs outline-none" disabled={u.role === 'admin'}>
                            <option value="admin">Admin (All Access)</option>
-                           <option value="user">Editor (User)</option>
+                           <option value="crewing">Crewing (Operations)</option>
+                           <option value="user">User (Evaluator)</option>
                            <option value="viewer">Viewer (Read Only)</option>
                         </select>
                       ) : (
-                        <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${u.role==='admin'?'bg-red-100 text-red-700':u.role==='user'?'bg-blue-100 text-blue-700':'bg-slate-200 text-slate-700'}`}>{u.role}</span>
+                        <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${u.role==='admin'?'bg-red-100 text-red-700':u.role==='crewing'?'bg-indigo-100 text-indigo-700':u.role==='user'?'bg-blue-100 text-blue-700':'bg-slate-200 text-slate-700'}`}>{u.role}</span>
                       )}
                     </td>
                     <td className="p-3 text-right">
@@ -1907,7 +1920,7 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelet
                 </td>
                 <td className="p-3">
                   <select className="border border-indigo-200 rounded p-1.5 text-sm outline-none bg-white" value={newUser.role} onChange={e=>setNewUser({...newUser, role: e.target.value})}>
-                    <option value="user">Editor</option><option value="viewer">Viewer</option>
+                    <option value="crewing">Crewing (Operations)</option><option value="user">User (Evaluator)</option><option value="viewer">Viewer</option>
                   </select>
                 </td>
                 <td className="p-3 text-right"><button onClick={addUser} disabled={!newUser.username || !newUser.password} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm font-bold disabled:opacity-50">Add User</button></td>
@@ -2421,11 +2434,11 @@ function PromotionsRecruitment({ promotions, matrix, ranks, currentUser, onAdd, 
       <div className="flex justify-between items-end shrink-0">
         <h1 className="text-2xl font-bold text-slate-800">Promotions & Recruitment</h1>
         <div className="flex items-center gap-3">
-           <div className="bg-slate-200 p-1 rounded-md flex text-sm font-medium shadow-sm">
+        <div className="bg-slate-200 p-1 rounded-md flex text-sm font-medium shadow-sm">
              <button onClick={() => setTab('active')} className={`px-4 py-1 rounded transition-colors ${tab==='active'?'bg-white shadow text-slate-800':'text-slate-500 hover:text-slate-700'}`}>Active</button>
              <button onClick={() => setTab('archived')} className={`px-4 py-1 rounded transition-colors ${tab==='archived'?'bg-white shadow text-slate-800':'text-slate-500 hover:text-slate-700'}`}>Archived</button>
            </div>
-           {currentUser.role !== 'viewer' && tab === 'active' && (
+           {['admin', 'crewing'].includes(currentUser.role) && tab === 'active' && (
              <button onClick={() => setAddModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm font-bold shadow-sm flex items-center gap-1 transition-colors"><Plus size={16}/> New Candidate</button>
            )}
         </div>
@@ -2486,14 +2499,15 @@ function PromotionsRecruitment({ promotions, matrix, ranks, currentUser, onAdd, 
                            {tab === 'active' && currentUser.role !== 'viewer' ? (
                               <div className="flex gap-2">
                                 <button onClick={() => setEditModal(p)} className="bg-white hover:bg-slate-50 text-blue-600 px-3 py-1.5 rounded border border-slate-200 font-bold text-xs shadow-sm transition-colors">Evaluate</button>
+                                {['admin', 'crewing'].includes(currentUser.role) && (
+                                  <button onClick={() => onUpdate(p.id, 'status', 'archived')} className="bg-white hover:bg-slate-50 text-emerald-600 px-3 py-1.5 rounded border border-slate-200 font-bold text-xs shadow-sm transition-colors" title="Complete Process">Complete</button>
+                                )}
                                 {currentUser.role === 'admin' && (
-                                  <>
-                                    <button onClick={() => onUpdate(p.id, 'status', 'archived')} className="bg-white hover:bg-slate-50 text-emerald-600 px-3 py-1.5 rounded border border-slate-200 font-bold text-xs shadow-sm transition-colors" title="Complete Process">Complete</button>
-                                    <button onClick={() => setDeleteConfirmId(p.id)} className="bg-white hover:bg-slate-50 text-slate-400 hover:text-red-500 px-2 py-1.5 rounded border border-slate-200 transition-colors shadow-sm"><Trash2 size={16}/></button>
-                                  </>
+                                  <button onClick={() => setDeleteConfirmId(p.id)} className="bg-white hover:bg-slate-50 text-slate-400 hover:text-red-500 px-2 py-1.5 rounded border border-slate-200 transition-colors shadow-sm"><Trash2 size={16}/></button>
                                 )}
                               </div>
                            ) : (
+                            
                               <div className="flex items-center">
                                  {currentUser.role === 'admin' && <button onClick={() => onUpdate(p.id, 'status', 'active')} className="text-slate-400 hover:text-blue-500 flex items-center gap-1 text-xs font-medium mr-3"><RotateCcw size={14}/> Restore</button>}
                                  <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded uppercase tracking-wide">Archived</span>
