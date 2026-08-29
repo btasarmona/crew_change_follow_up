@@ -358,7 +358,10 @@ export default function App() {
           <TopNavItem icon={<Star />} label="Eval Overview" active={activeTab === 'eval_overview'} onClick={() => setActiveTab('eval_overview')} />
           {['admin', 'crewing'].includes(currentUser.role) && <TopNavItem icon={<Plus />} label="Add Eval" active={activeTab === 'eval_add'} onClick={() => setActiveTab('eval_add')} />}
           <TopNavItem icon={<UserCheck />} label="Debriefings" active={activeTab === 'debriefings'} onClick={() => setActiveTab('debriefings')} badge={activeDebriefsCount} />
-
+          <TopNavItem icon={<Briefcase />} label="Promo & Recruit" active={activeTab === 'promotions'} onClick={() => setActiveTab('promotions')} />
+          {currentUser.role === 'admin' && <TopNavItem icon={<Settings />} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />}
+        </nav>
+        
         <div className="flex items-center gap-4 border-l border-slate-700 pl-6 shrink-0">
           <div className="flex items-center gap-2 text-sm text-slate-300">
             <span>Hi, <strong className="text-white">{currentUser.username}</strong></span>
