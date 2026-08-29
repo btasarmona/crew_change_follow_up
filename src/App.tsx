@@ -1170,188 +1170,347 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept }) {
     );
   }
 
-function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, users, setUsers, currentUser, setCurrentUser }) {
-  const [newCol, setNewCol] = useState({ name: '', type: 'checkbox', appliesTo: 'both' });
-  const [newRank, setNewRank] = useState({ rank: '', dept: 'Deck', checkOverlap: false, competencies: [] });
-  const [newCompText, setNewCompText] = useState({});
-  const [newUser, setNewUser] = useState({ username: '', password: '', role: 'user' });
-
-  // User Edit State
-  const [editingUserId, setEditingUserId] = useState(null);
-  const [editUserData, setEditUserData] = useState({});
-
-  const moveMatrix = (index, dir) => {
-    if ((dir === -1 && index === 0) || (dir === 1 && index === matrix.length - 1)) return;
-    const newArr = [...matrix];
-    const temp = newArr[index];
-    newArr[index] = newArr[index + dir];
-    newArr[index + dir] = temp;
-    setMatrix(newArr);
-  };
+  function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, promoMatrix, setPromoMatrix, debriefMatrix, setDebriefMatrix, users, setUsers, currentUser, setCurrentUser }) {
+    const [newCol, setNewCol] = useState({ name: '', type: 'checkbox', appliesTo: 'both' });
+    const [newRank, setNewRank] = useState({ rank: '', dept: 'Deck', checkOverlap: false, competencies: [] });
+    const [newCompText, setNewCompText] = useState({});
+    const [newUser, setNewUser] = useState({ username: '', password: '', role: 'viewer', jobTitle: '' });
+    const [newPromoRow, setNewPromoRow] = useState({ rank: '', steps: [] });
+    const [newDebriefRow, setNewDebriefRow] = useState({ name: '', allowedRoles: [] });
   
-  const addRank = () => {
-    if(!newRank.rank) return;
-    setMatrix([...matrix, { ...newRank, id: generateId() }]);
-    setNewRank({ rank: '', dept: 'Deck', checkOverlap: false, competencies: [] });
-  };
+    const [editingUserId, setEditingUserId] = useState(null);
+    const [editUserData, setEditUserData] = useState({});
+    
+    const JOB_TITLES = ['Crew Manager', 'Welfare Officer', 'Crewing S.I.', 'Marine S.I.', 'Tech S.I.', 'Tech. Manager', 'DPA', 'Marine Manager', 'CTO', 'Other'];
   
-  const deleteRank = (id) => setMatrix(matrix.filter(m => m.id !== id));
+    const generateId = () => Math.random().toString(36).substr(2, 9);
   
-  const addCompetency = (index) => {
-    const text = newCompText[index];
-    if(!text) return;
-    const nm = [...matrix];
-    if(!nm[index].competencies.includes(text)) nm[index].competencies.push(text);
-    setMatrix(nm);
-    setNewCompText({...newCompText, [index]: ''});
-  };
-
-  const removeCompetency = (mIndex, cIndex) => {
-    const nm = [...matrix];
-    nm[mIndex].competencies.splice(cIndex, 1);
-    setMatrix(nm);
-  };
-
-  const addColumn = () => {
-    if(!newCol.name) return;
-  const addPromoRow = () => {
-    if(!newPromoRow.rank) return;
-    setPromoMatrix([...(promoMatrix||[]), { id: 'pm'+Date.now(), rank: newPromoRow.rank, steps: newPromoRow.steps }]);
-    setNewPromoRow({ rank: '', steps: [] });
-  };
-
-  const addDebriefRow = () => {
-    if(!newDebriefRow.name) return;
-    setDebriefMatrix([...(debriefMatrix||[]), { id: 'dm'+Date.now(), name: newDebriefRow.name, allowedRoles: newDebriefRow.allowedRoles }]);
-    setNewDebriefRow({ name: '', allowedRoles: [] });
-  };
-
-  const deleteUser = (id) => {
-    if (users.find(u => u.id === id)?.role === 'admin') return; 
-    setUsers(users.filter(u => u.id !== id));
-  };
-
-  return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-slate-800">System Administration</h1>
-      
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-        <h2 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><Users size={20} className="text-indigo-500"/> User Management</h2>
-        <p className="text-sm text-slate-500 mb-4 bg-slate-50 p-3 rounded border border-slate-100">Add, edit, or remove users. Admins can update their own username/password here. Viewers have read-only access and can only add notes.</p>
+    const moveMatrix = (index, dir) => {
+      if ((dir === -1 && index === 0) || (dir === 1 && index === (matrix||[]).length - 1)) return;
+      const newArr = [...(matrix||[])];
+      const temp = newArr[index];
+      newArr[index] = newArr[index + dir];
+      newArr[index + dir] = temp;
+      setMatrix(newArr);
+    };
+    
+    const addRank = () => {
+      if(!newRank.rank) return;
+      setMatrix([...(matrix||[]), { ...newRank, id: generateId() }]);
+      setNewRank({ rank: '', dept: 'Deck', checkOverlap: false, competencies: [] });
+    };
+    
+    const deleteRank = (id) => setMatrix((matrix||[]).filter(m => m.id !== id));
+    
+    const addCompetency = (index) => {
+      const text = newCompText[index];
+      if(!text) return;
+      const nm = [...(matrix||[])];
+      if(!nm[index].competencies) nm[index].competencies = [];
+      if(!nm[index].competencies.includes(text)) nm[index].competencies.push(text);
+      setMatrix(nm);
+      setNewCompText({...newCompText, [index]: ''});
+    };
+  
+    const removeCompetency = (mIndex, cIndex) => {
+      const nm = [...(matrix||[])];
+      nm[mIndex].competencies.splice(cIndex, 1);
+      setMatrix(nm);
+    };
+  
+    const addColumn = () => {
+      if(!newCol.name) return;
+      setProcSchema([...(procSchema||[]), { ...newCol, id: 'ps'+Date.now() }]);
+      setNewCol({ name: '', type: 'checkbox', appliesTo: 'both' });
+    };
+  
+    const addUser = () => {
+      if(!newUser.username || !newUser.password) return;
+      setUsers([...(users||[]), { ...newUser, id: 'u'+Date.now() }]);
+      setNewUser({ username: '', password: '', role: 'viewer', jobTitle: '' });
+    };
+  
+    const deleteUser = (id) => {
+      if ((users||[]).find(u => u.id === id)?.role === 'admin') return; 
+      setUsers((users||[]).filter(u => u.id !== id));
+    };
+  
+    const addPromoRow = () => {
+      if(!newPromoRow.rank) return;
+      setPromoMatrix([...(promoMatrix||[]), { id: 'pm'+Date.now(), rank: newPromoRow.rank, steps: newPromoRow.steps }]);
+      setNewPromoRow({ rank: '', steps: [] });
+    };
+  
+    const addDebriefRow = () => {
+      if(!newDebriefRow.name) return;
+      setDebriefMatrix([...(debriefMatrix||[]), { id: 'dm'+Date.now(), name: newDebriefRow.name, allowedRoles: newDebriefRow.allowedRoles }]);
+      setNewDebriefRow({ name: '', allowedRoles: [] });
+    };
+  
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold text-slate-800">System Administration</h1>
         
-        <div className="overflow-x-auto mb-4">
-          <table className="w-full text-sm text-left border border-slate-200 rounded-lg whitespace-nowrap bg-white">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
-              <tr><th className="p-3">Username</th><th className="p-3">Password</th><th className="p-3">Role</th><th className="p-3 text-right">Actions</th></tr>
-            </thead>
-            <tbody>
-              {users.map(u => {
-                const isEditing = editingUserId === u.id;
-                return (
-                  <tr key={u.id} className="border-b border-slate-100 hover:bg-slate-50/50">
-                    <td className="p-3">
-                      {isEditing ? (
-                        <input value={editUserData.username} onChange={e=>setEditUserData({...editUserData, username: e.target.value})} className="border border-blue-400 rounded p-1.5 text-xs w-full focus:outline-none"/>
-                      ) : (
-                        <span className="font-bold text-slate-800">{u.username}</span>
-                      )}
+        <datalist id="jobTitlesList">
+          {JOB_TITLES.map(j => <option key={j} value={j}/>)}
+        </datalist>
+  
+        {/* 1. USER MANAGEMENT */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <h2 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><Users size={20} className="text-indigo-500"/> User Management</h2>
+          <p className="text-sm text-slate-500 mb-4 bg-slate-50 p-3 rounded border border-slate-100">Add, edit, or remove users. Admins can update their own username/password here. Viewers have read-only access and can only add notes.</p>
+          
+          <div className="overflow-x-auto mb-4">
+            <table className="w-full text-sm text-left border border-slate-200 rounded-lg whitespace-nowrap bg-white">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                <tr><th className="p-3">Username</th><th className="p-3">Password</th><th className="p-3">Job Title</th><th className="p-3">Access Level</th><th className="p-3 text-right">Actions</th></tr>
+              </thead>
+              <tbody>
+                {(users||[]).map(u => {
+                  const isEditing = editingUserId === u.id;
+                  return (
+                    <tr key={u.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                      <td className="p-3">
+                        {isEditing ? (
+                          <input value={editUserData.username} onChange={e=>setEditUserData({...editUserData, username: e.target.value})} className="border border-blue-400 rounded p-1.5 text-xs w-full focus:outline-none"/>
+                        ) : (
+                          <span className="font-bold text-slate-800">{u.username}</span>
+                        )}
+                      </td>
+                      <td className="p-3 font-mono text-xs text-slate-500">
+                        {isEditing ? (
+                          <input value={editUserData.password} onChange={e=>setEditUserData({...editUserData, password: e.target.value})} className="border border-blue-400 rounded p-1.5 text-xs w-full focus:outline-none"/>
+                        ) : (
+                          u.role === 'admin' ? '********' : u.password
+                        )}
+                      </td>
+                      <td className="p-3">
+                        {isEditing ? (
+                          <input list="jobTitlesList" value={editUserData.jobTitle || ''} onChange={e=>setEditUserData({...editUserData, jobTitle: e.target.value})} className="border border-blue-400 rounded p-1.5 text-xs w-full outline-none" placeholder="Type or select..."/>
+                        ) : (
+                          <span className="font-bold text-slate-600">{u.jobTitle || 'Crew Manager'}</span>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        {isEditing ? (
+                          <select value={editUserData.role} onChange={e=>setEditUserData({...editUserData, role: e.target.value})} className="border border-blue-400 rounded p-1.5 text-xs outline-none" disabled={u.role === 'admin'}>
+                             <option value="admin">Admin (All Access)</option>
+                             <option value="crewing">Crewing (Operations)</option>
+                             <option value="user">User (Evaluator)</option>
+                             <option value="viewer">Viewer (Read Only)</option>
+                          </select>
+                        ) : (
+                          <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${u.role==='admin'?'bg-red-100 text-red-700':u.role==='crewing'?'bg-indigo-100 text-indigo-700':u.role==='user'?'bg-blue-100 text-blue-700':'bg-slate-200 text-slate-700'}`}>{u.role}</span>
+                        )}
+                      </td>
+                      <td className="p-3 text-right">
+                        {isEditing ? (
+                          <div className="flex justify-end gap-2">
+                            <button onClick={() => {
+                              setUsers((users||[]).map(x => x.id === u.id ? { ...x, ...editUserData } : x));
+                              setEditingUserId(null);
+                            }} className="text-blue-600 font-bold text-xs">Save</button>
+                            <button onClick={() => setEditingUserId(null)} className="text-slate-400 font-bold text-xs">Cancel</button>
+                          </div>
+                        ) : (
+                          <div className="flex justify-end gap-2">
+                            <button onClick={() => { setEditingUserId(u.id); setEditUserData(u); }} className="text-slate-400 hover:text-blue-500 p-1"><Edit2 size={16}/></button>
+                            <button onClick={() => deleteUser(u.id)} disabled={u.role === 'admin'} className="text-slate-400 hover:text-red-500 p-1 disabled:opacity-50"><Trash2 size={16}/></button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+                <tr className="bg-indigo-50/50">
+                  <td className="p-3"><input type="text" placeholder="New Username" value={newUser.username} onChange={e=>setNewUser({...newUser, username: e.target.value})} className="w-full border border-indigo-200 rounded p-1.5 text-sm outline-none bg-white"/></td>
+                  <td className="p-3"><input type="text" placeholder="Password" value={newUser.password} onChange={e=>setNewUser({...newUser, password: e.target.value})} className="w-full border border-indigo-200 rounded p-1.5 text-sm outline-none bg-white"/></td>
+                  <td className="p-3">
+                    <input list="jobTitlesList" placeholder="Job Title" value={newUser.jobTitle || ''} onChange={e=>setNewUser({...newUser, jobTitle: e.target.value})} className="w-full border border-indigo-200 rounded p-1.5 text-sm outline-none bg-white"/>
+                  </td>
+                  <td className="p-3">
+                    <select className="border border-indigo-200 rounded p-1.5 text-sm outline-none bg-white" value={newUser.role} onChange={e=>setNewUser({...newUser, role: e.target.value})}>
+                      <option value="crewing">Crewing (Operations)</option><option value="user">User (Evaluator)</option><option value="viewer">Viewer</option>
+                    </select>
+                  </td>
+                  <td className="p-3 text-right"><button onClick={addUser} disabled={!newUser.username || !newUser.password} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm font-bold disabled:opacity-50">Add User</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+  
+        {/* 2. RANK MATRIX */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <h2 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><Ship size={20} className="text-blue-500"/> Complience Matrix & Ranks</h2>
+          
+          <div className="overflow-x-auto mb-4">
+            <table className="w-full text-sm text-left border border-slate-200 rounded-lg whitespace-nowrap bg-white">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                <tr><th className="p-3 w-10"></th><th className="p-3 font-semibold">Rank</th><th className="p-3 font-semibold">Department</th><th className="p-3 font-semibold text-center">Gantt Overlap</th><th className="p-3 font-semibold w-1/2">Required Competencies</th><th className="p-3 text-right"></th></tr>
+              </thead>
+              <tbody>
+                {(matrix||[]).map((m, i) => (
+                  <tr key={m.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                    <td className="p-3 text-slate-400 flex flex-col gap-1 items-center justify-center h-full pt-4">
+                      <button onClick={()=>moveMatrix(i, -1)} className="hover:text-blue-500 disabled:opacity-30"><ChevronUp size={14}/></button>
+                      <button onClick={()=>moveMatrix(i, 1)} className="hover:text-blue-500 disabled:opacity-30"><ChevronDown size={14}/></button>
                     </td>
-                    <td className="p-3 font-mono text-xs text-slate-500">
-                      {isEditing ? (
-                        <input value={editUserData.password} onChange={e=>setEditUserData({...editUserData, password: e.target.value})} className="border border-blue-400 rounded p-1.5 text-xs w-full focus:outline-none"/>
-                      ) : (
-                        u.role === 'admin' ? '********' : u.password
-                      )}
+                    <td className="p-3 font-bold text-slate-800">{m.rank}</td>
+                    <td className="p-3 text-slate-600">{m.dept}</td>
+                    <td className="p-3 text-center">{m.checkOverlap ? <span className="text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded text-xs">Warn</span> : <span className="text-slate-400 text-xs">Allowed</span>}</td>
+                    <td className="p-3 flex gap-2 flex-wrap items-center">
+                      {m.competencies.map((c, j) => (
+                        <span key={j} className="bg-blue-100 text-blue-800 text-[11px] font-bold px-2 py-1 rounded border border-blue-200 flex items-center gap-1">{c} <button onClick={()=>removeCompetency(i,j)} className="hover:text-red-500 ml-1"><X size={10}/></button></span>
+                      ))}
+                      <div className="flex items-center ml-2 border border-blue-200 rounded overflow-hidden">
+                        <input type="text" placeholder="Add comp..." className="text-xs p-1 outline-none bg-white border-none w-28" value={newCompText[i]||''} onChange={e=>setNewCompText({...newCompText, [i]: e.target.value})} onKeyDown={e=>e.key==='Enter'&&addCompetency(i)}/>
+                        <button onClick={()=>addCompetency(i)} className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-2 py-1 font-bold text-xs border-l border-blue-200">+</button>
+                      </div>
                     </td>
-                    <td className="p-3">
-                      {isEditing ? (
-                        <select value={editUserData.role} onChange={e=>setEditUserData({...editUserData, role: e.target.value})} className="border border-blue-400 rounded p-1.5 text-xs outline-none" disabled={u.role === 'admin'}>
-                           <option value="admin">Admin</option>
-                           <option value="user">User</option>
-                           <option value="viewer">Viewer</option>
-                        </select>
-                      ) : (
-                        <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${u.role==='admin'?'bg-red-100 text-red-700':u.role==='user'?'bg-blue-100 text-blue-700':'bg-slate-200 text-slate-700'}`}>{u.role}</span>
-                      )}
+                    <td className="p-3 text-right"><button onClick={()=>deleteRank(m.id)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={16}/></button></td>
+                  </tr>
+                ))}
+                <tr className="bg-blue-50/50">
+                  <td className="p-3"></td>
+                  <td className="p-3"><input type="text" placeholder="New Rank" value={newRank.rank} onChange={e=>setNewRank({...newRank, rank: e.target.value})} className="w-full border border-blue-200 rounded p-1.5 text-sm outline-none bg-white"/></td>
+                  <td className="p-3"><select value={newRank.dept} onChange={e=>setNewRank({...newRank, dept: e.target.value})} className="w-full border border-blue-200 rounded p-1.5 text-sm outline-none bg-white"><option value="Deck">Deck</option><option value="Engine">Engine</option><option value="Other">Other</option></select></td>
+                  <td className="p-3 text-center"><label className="cursor-pointer flex items-center justify-center gap-1 text-xs text-slate-600"><input type="checkbox" checked={newRank.checkOverlap} onChange={e=>setNewRank({...newRank, checkOverlap: e.target.checked})}/> Block Overlap</label></td>
+                  <td className="p-3"><span className="text-xs text-blue-400 italic">Add rank first, then add competencies.</span></td>
+                  <td className="p-3 text-right"><button onClick={addRank} disabled={!newRank.rank} className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-bold disabled:opacity-50">Add Rank</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+  
+        {/* 3. PROCEDURES SCHEMA */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+           <h2 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><FileCheck size={20} className="text-green-500"/> Procedure Dynamic Columns</h2>
+           <div className="overflow-x-auto mb-4">
+              <table className="w-full text-sm text-left border border-slate-200 rounded-lg whitespace-nowrap bg-white">
+                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600"><tr><th className="p-3">Column Name</th><th className="p-3">Type</th><th className="p-3">Applies To</th><th className="p-3 text-right"></th></tr></thead>
+                 <tbody>
+                    {(procSchema||[]).map(col => (
+                       <tr key={col.id} className="border-b border-slate-100"><td className="p-3 font-medium">{col.name}</td><td className="p-3 text-slate-500">{col.type}</td><td className="p-3 text-slate-500 capitalize">{col.appliesTo}</td><td className="p-3 text-right"><button onClick={()=>setProcSchema((procSchema||[]).filter(c=>c.id!==col.id))} className="text-slate-400 hover:text-red-500"><Trash2 size={16}/></button></td></tr>
+                    ))}
+                 </tbody>
+              </table>
+           </div>
+           <div className="flex gap-3 items-center bg-green-50/50 p-3 rounded-lg border border-green-100">
+              <input type="text" placeholder="Column Name (e.g. Flight Ticket)" value={newCol.name} onChange={e=>setNewCol({...newCol, name: e.target.value})} className="border border-green-200 rounded p-1.5 text-sm flex-1 outline-none"/>
+              <select value={newCol.type} onChange={e=>setNewCol({...newCol, type: e.target.value})} className="border border-green-200 rounded p-1.5 text-sm outline-none"><option value="checkbox">Checkbox</option><option value="date">Date</option></select>
+              <select value={newCol.appliesTo} onChange={e=>setNewCol({...newCol, appliesTo: e.target.value})} className="border border-green-200 rounded p-1.5 text-sm outline-none"><option value="both">Both (On/Off)</option><option value="onsigner">Onsigner Only</option><option value="offsigner">Offsigner Only</option></select>
+              <button onClick={addColumn} disabled={!newCol.name} className="bg-green-600 text-white px-4 py-1.5 rounded font-bold text-sm disabled:opacity-50">Add Column</button>
+           </div>
+        </div>
+  
+        {/* 4. PROMOTION & RECRUITMENT MATRIX */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <h2 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><Briefcase size={20} className="text-purple-500"/> Promotion & Recruitment Matrix</h2>
+          <div className="overflow-x-auto mb-4">
+            <table className="w-full text-sm text-left border border-slate-200 rounded-lg whitespace-nowrap bg-white">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                <tr><th className="p-3 font-semibold w-48">Rank</th><th className="p-3 font-semibold">Approval Steps (in order)</th><th className="p-3 text-right"></th></tr>
+              </thead>
+              <tbody>
+                {(promoMatrix || []).map((pm, i) => (
+                  <tr key={pm.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                    <td className="p-3 font-bold text-slate-800">{pm.rank}</td>
+                    <td className="p-3 flex gap-2 flex-wrap items-center">
+                      {pm.steps.map((stepRole, j) => (
+                        <span key={j} className="bg-purple-100 text-purple-800 text-[11px] font-bold px-2 py-1 rounded border border-purple-200 flex items-center gap-1">
+                          {j+1}. {stepRole} 
+                          <button onClick={() => {
+                             const nm = [...promoMatrix]; nm[i].steps.splice(j,1); setPromoMatrix(nm);
+                          }} className="hover:text-red-500 ml-1"><X size={10}/></button>
+                        </span>
+                      ))}
+                      <div className="flex items-center ml-2 border border-purple-200 rounded overflow-hidden">
+                        <input list="jobTitlesList" id={`promo-step-${i}`} placeholder="Role..." className="text-xs p-1 outline-none bg-white border-none w-28"/>
+                        <button onClick={() => {
+                           const el = document.getElementById(`promo-step-${i}`);
+                           if(el && el.value) { const nm = [...promoMatrix]; nm[i].steps.push(el.value); setPromoMatrix(nm); el.value = ''; }
+                        }} className="bg-purple-50 hover:bg-purple-100 text-purple-700 px-2 py-1 font-bold text-xs border-l border-purple-200">+</button>
+                      </div>
                     </td>
                     <td className="p-3 text-right">
-                    <button onClick={()=>setPromoMatrix(promoMatrix.filter(x=>x.id!==pm.id))} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
+                      <button onClick={() => setPromoMatrix(promoMatrix.filter(x => x.id !== pm.id))} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
+                    </td>
+                  </tr>
+                ))}
+                <tr className="bg-purple-50/50">
+                  <td className="p-3">
+                    <select value={newPromoRow.rank} onChange={e => setNewPromoRow({...newPromoRow, rank: e.target.value})} className="w-full border border-purple-200 rounded p-1.5 text-sm bg-white outline-none">
+                       <option value="">Select Rank</option>
+                       {(matrix||[]).map(m => <option key={m.id} value={m.rank}>{m.rank}</option>)}
+                    </select>
                   </td>
-                </tr>
-              ))}
-              <tr className="bg-purple-50/50">
-                <td className="p-3">
-                  <select value={newPromoRow.rank} onChange={e=>setNewPromoRow({...newPromoRow, rank: e.target.value})} className="w-full border border-purple-200 rounded p-1.5 text-sm bg-white outline-none">
-                     <option value="">Select Rank</option>
-                     {matrix.map(m => <option key={m.id} value={m.rank}>{m.rank}</option>)}
-                  </select>
-                </td>
-                <td className="p-3">
-                  <span className="text-xs text-purple-400 italic">Add Rank first, then add approval steps.</span>
-                </td>
-                <td className="p-3 text-right">
-                  <button onClick={addPromoRow} disabled={!newPromoRow.rank} className="bg-purple-600 text-white px-3 py-1.5 rounded text-sm font-bold disabled:opacity-50">Add Rule</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* 5. DEBRIEFING MATRIX */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-        <h2 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><UserCheck size={20} className="text-teal-500"/> Debriefing Departments & Access</h2>
-        <p className="text-sm text-slate-500 mb-4 bg-slate-50 p-3 rounded border border-slate-100">Define departments for Debriefings (e.g. Deck, Marine, Procurement) and select which Job Titles are authorized to evaluate them.</p>
-        
-        <div className="overflow-x-auto mb-4">
-          <table className="w-full text-sm text-left border border-slate-200 rounded-lg whitespace-nowrap bg-white">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
-              <tr><th className="p-3 font-semibold w-48">Department Name</th><th className="p-3 font-semibold">Allowed Evaluators (Job Titles)</th><th className="p-3 text-right"></th></tr>
-            </thead>
-            <tbody>
-              {(debriefMatrix||[]).map((dm, i) => (
-                <tr key={dm.id} className="border-b border-slate-100 hover:bg-slate-50/50">
-                  <td className="p-3 font-bold text-slate-800">{dm.name}</td>
-                  <td className="p-3 flex gap-2 flex-wrap items-center">
-                    {(dm.allowedRoles||[]).map((role, j) => (
-                      <span key={j} className="bg-teal-100 text-teal-800 text-[11px] font-bold px-2 py-1 rounded border border-teal-200 flex items-center gap-1">
-                        {role} 
-                        <button onClick={()=>{
-                           const nm = [...debriefMatrix]; nm[i].allowedRoles.splice(j,1); setDebriefMatrix(nm);
-                        }} className="hover:text-red-500 ml-1"><X size={10}/></button>
-                      </span>
-                    ))}
-                    <div className="flex items-center ml-2 border border-teal-200 rounded overflow-hidden">
-                      <input list="jobTitlesList" id={`debrief-role-${i}`} placeholder="Add role..." className="text-xs p-1 outline-none bg-white border-none w-28"/>
-                      <button onClick={()=>{
-                         const el = document.getElementById(`debrief-role-${i}`);
-                         if(el && el.value) { const nm = [...debriefMatrix]; nm[i].allowedRoles.push(el.value); setDebriefMatrix(nm); el.value = ''; }
-                      }} className="bg-teal-50 hover:bg-teal-100 text-teal-700 px-2 py-1 font-bold text-xs border-l border-teal-200">+</button>
-                    </div>
+                  <td className="p-3">
+                    <span className="text-xs text-purple-400 italic">Add Rank first, then add approval steps.</span>
                   </td>
                   <td className="p-3 text-right">
-                    <button onClick={()=>setDebriefMatrix(debriefMatrix.filter(x=>x.id!==dm.id))} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
+                    <button onClick={addPromoRow} disabled={!newPromoRow.rank} className="bg-purple-600 text-white px-3 py-1.5 rounded text-sm font-bold disabled:opacity-50">Add Rule</button>
                   </td>
                 </tr>
-              ))}
-              <tr className="bg-teal-50/50">
-                <td className="p-3">
-                  <input type="text" placeholder="e.g. Procurement" value={newDebriefRow.name} onChange={e=>setNewDebriefRow({...newDebriefRow, name: e.target.value})} className="w-full border border-teal-200 rounded p-1.5 text-sm bg-white outline-none"/>
-                </td>
-                <td className="p-3">
-                  <span className="text-xs text-teal-500 italic">Add department first, then add authorized roles.</span>
-                </td>
-                <td className="p-3 text-right">
-                  <button onClick={addDebriefRow} disabled={!newDebriefRow.name} className="bg-teal-600 text-white px-3 py-1.5 rounded text-sm font-bold disabled:opacity-50">Add Dept</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
         </div>
+  
+        {/* 5. DEBRIEFING MATRIX */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <h2 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><UserCheck size={20} className="text-teal-500"/> Debriefing Departments & Access</h2>
+          <div className="overflow-x-auto mb-4">
+            <table className="w-full text-sm text-left border border-slate-200 rounded-lg whitespace-nowrap bg-white">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                <tr><th className="p-3 font-semibold w-48">Department Name</th><th className="p-3 font-semibold">Allowed Evaluators (Job Titles)</th><th className="p-3 text-right"></th></tr>
+              </thead>
+              <tbody>
+                {(debriefMatrix||[]).map((dm, i) => (
+                  <tr key={dm.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                    <td className="p-3 font-bold text-slate-800">{dm.name}</td>
+                    <td className="p-3 flex gap-2 flex-wrap items-center">
+                      {(dm.allowedRoles||[]).map((role, j) => (
+                        <span key={j} className="bg-teal-100 text-teal-800 text-[11px] font-bold px-2 py-1 rounded border border-teal-200 flex items-center gap-1">
+                          {role} 
+                          <button onClick={()=>{
+                             const nm = [...debriefMatrix]; nm[i].allowedRoles.splice(j,1); setDebriefMatrix(nm);
+                          }} className="hover:text-red-500 ml-1"><X size={10}/></button>
+                        </span>
+                      ))}
+                      <div className="flex items-center ml-2 border border-teal-200 rounded overflow-hidden">
+                        <input list="jobTitlesList" id={`debrief-role-${i}`} placeholder="Add role..." className="text-xs p-1 outline-none bg-white border-none w-28"/>
+                        <button onClick={()=>{
+                           const el = document.getElementById(`debrief-role-${i}`);
+                           if(el && el.value) { const nm = [...debriefMatrix]; nm[i].allowedRoles.push(el.value); setDebriefMatrix(nm); el.value = ''; }
+                        }} className="bg-teal-50 hover:bg-teal-100 text-teal-700 px-2 py-1 font-bold text-xs border-l border-teal-200">+</button>
+                      </div>
+                    </td>
+                    <td className="p-3 text-right">
+                      <button onClick={()=>setDebriefMatrix(debriefMatrix.filter(x=>x.id!==dm.id))} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
+                    </td>
+                  </tr>
+                ))}
+                <tr className="bg-teal-50/50">
+                  <td className="p-3">
+                    <input type="text" placeholder="e.g. Procurement" value={newDebriefRow.name} onChange={e=>setNewDebriefRow({...newDebriefRow, name: e.target.value})} className="w-full border border-teal-200 rounded p-1.5 text-sm bg-white outline-none"/>
+                  </td>
+                  <td className="p-3">
+                    <span className="text-xs text-teal-500 italic">Add department first, then add authorized roles.</span>
+                  </td>
+                  <td className="p-3 text-right">
+                    <button onClick={addDebriefRow} disabled={!newDebriefRow.name} className="bg-teal-600 text-white px-3 py-1.5 rounded text-sm font-bold disabled:opacity-50">Add Dept</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+  
       </div>
-    </div>
-  );
-}
+    );
+  }
 
 function CrewFormModal({ matrix, crewMember, onClose, onConfirm }) {
   const isEdit = !!crewMember;
@@ -1646,4 +1805,4 @@ function Login({ users, onLogin }) {
       </div>
     </div>
   );
-}}
+}
