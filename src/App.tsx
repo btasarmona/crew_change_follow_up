@@ -2763,3 +2763,20 @@ function PromotionsRecruitment({ promotions, matrix, ranks, currentUser, onAdd, 
     </div>
   );
 }
+function DeleteConfirmModal({ message, showConfirm, onClose, onConfirm }) {
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[70] p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden p-6 text-center">
+        <AlertTriangle size={48} className="mx-auto text-red-500 mb-4" />
+        <h3 className="text-lg font-bold text-slate-800 mb-2">{showConfirm ? 'Confirm Deletion' : 'Cannot Delete'}</h3>
+        <p className="text-sm text-slate-600 mb-6">{message}</p>
+        <div className="flex justify-center gap-3">
+           <button onClick={onClose} className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg font-bold text-sm">Close</button>
+           {showConfirm && (
+             <button onClick={onConfirm} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-sm">Yes, Delete</button>
+           )}
+        </div>
+      </div>
+    </div>
+  );
+}
