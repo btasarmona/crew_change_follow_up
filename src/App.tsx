@@ -2217,326 +2217,6 @@ function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, promoMatri
   );
 }
 
-function PromotionsRecruitment({ promotions, matrix, ranks, currentUser, onAdd, onUpdate, onDelete, onUpdateStep }) {
-  const [tab, setTab] = useState('active');
-  const [editModal, setEditModal] = useState(null);
-  const [addModal, setAddModal] = useState(false);
-  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
-
-  const [fType, setFType] = useState('');
-  const [fRank, setFRank] = useState('');
-  const [fName, setFName] = useState('');
-
-  const [newPromo, setNewPromo] = useState({ name: '', rank: '', type: 'recruitment' });
-
-  const displayData = promotions.filter(p => {
-    if (p.status !== tab) return false;
-    if (fType && p.type !== fType) return false;
-    if (fRank && p.rank !== fRank) return false;
-    if (fName && !(p.name || '').toLowerCase().includes(fName.toLowerCase())) return false;
-    return true;
-  });
-
-  const handleCreate = () => {
-    if (!newPromo.name || !newPromo.rank) return;
-    const rule = matrix.find(m => m.rank === newPromo.rank);
-    if (!rule || !rule.steps || rule.steps.length === 0) {
-      alert("Please define a Promotion/Recruitment rule for this Rank in Settings first!");
-      return;
-    }
-    
-    const stepsData = rule.steps.map(s => ({ role: s, date: '', score: '', reject: false, note: '' }));
-    
-    onAdd({
-      id: 'pr' + Date.now(),
-      name: newPromo.name,
-      rank: newPromo.rank,
-      type: newPromo.type,
-      status: 'active',
-      steps: stepsData,
-      creationDate: new Date().toISOString().split('T')[0]
-    });
-    setAddModal(false);
-    setNewPromo({ name: '', rank: '', type: 'recruitment' });
-  };
-
-  const calculateAvg = (steps) => {
-    if (steps.some(s => s.reject)) return 'REJECTED';
-    const scores = steps.map(s => Number(s.score)).filter(s => !isNaN(s) && s > 0);
-    if (scores.length === 0) return '-';
-    return (scores.reduce((a,b) => a + b, 0) / scores.length).toFixed(1);
-  };
-
-  const getAvgColor = (avg) => {
-    if (avg === 'REJECTED') return 'bg-red-100 text-red-700 border-red-300';
-    if (avg === '-') return 'bg-slate-100 text-slate-500 border-slate-200';
-    const s = Number(avg);
-    if (s < 60) return 'bg-red-100 text-red-700 border-red-300';
-    if (s <= 75) return 'bg-orange-100 text-orange-700 border-orange-300';
-    if (s <= 85) return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-    return 'bg-green-100 text-green-800 border-green-300';
-  };
-
-  const handleExport = () => {
-    let csv = "Type,Name,Rank,Status,Average Score\n";
-    displayData.forEach(d => {
-      let row = `${d.type},${d.name},${d.rank},${d.status},${calculateAvg(d.steps)}`;
-      csv += row + "\n";
-    });
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `promotions_recruitment_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  return (
-    <div className="space-y-4 h-full flex flex-col">
-      <div className="flex justify-between items-end shrink-0">
-        <h1 className="text-2xl font-bold text-slate-800">Promotions & Recruitment</h1>
-        <div className="flex items-center gap-3">
-           <div className="bg-slate-200 p-1 rounded-md flex text-sm font-medium shadow-sm">
-             <button onClick={() => setTab('active')} className={`px-4 py-1 rounded transition-colors ${tab==='active'?'bg-white shadow text-slate-800':'text-slate-500 hover:text-slate-700'}`}>Active</button>
-             <button onClick={() => setTab('archived')} className={`px-4 py-1 rounded transition-colors ${tab==='archived'?'bg-white shadow text-slate-800':'text-slate-500 hover:text-slate-700'}`}>Archived</button>
-           </div>
-           {['admin', 'crewing'].includes(currentUser.role) && tab === 'active' && (
-             <button onClick={() => setAddModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm font-bold shadow-sm flex items-center gap-1 transition-colors"><Plus size={16}/> New Candidate</button>
-           )}
-        </div>
-      </div>
-
-      <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-wrap gap-3 items-end shrink-0 justify-between">
-         <div className="flex gap-3">
-             <div className="flex items-center gap-2 text-sm text-slate-500 mr-2"><Filter size={16}/> Filters:</div>
-             <div>
-               <label className="block text-xs text-slate-400 mb-0.5">Type</label>
-               <select className="border border-slate-300 rounded text-sm p-1.5 focus:outline-none w-32" value={fType} onChange={e=>setFType(e.target.value)}>
-                 <option value="">All</option><option value="recruitment">Recruitment</option><option value="promotion">Promotion</option>
-               </select>
-             </div>
-             <div>
-               <label className="block text-xs text-slate-400 mb-0.5">Rank</label>
-               <select className="border border-slate-300 rounded text-sm p-1.5 focus:outline-none w-32" value={fRank} onChange={e=>setFRank(e.target.value)}>
-                 <option value="">All Ranks</option>
-                 {ranks.map(m => <option key={m.id} value={m.rank}>{m.rank}</option>)}
-               </select>
-             </div>
-             <div>
-               <label className="block text-xs text-slate-400 mb-0.5">Name</label>
-               <input type="text" placeholder="Search..." className="border border-slate-300 rounded text-sm p-1.5 w-40 focus:outline-none" value={fName} onChange={e=>setFName(e.target.value)} />
-             </div>
-             {(fType||fRank||fName) && (
-                <button onClick={()=>{setFType('');setFRank('');setFName('');}} className="text-xs text-blue-500 hover:underline mb-2 ml-2">Clear</button>
-             )}
-         </div>
-         <button onClick={handleExport} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-sm font-bold shadow-sm transition-colors mb-0.5">Export to Excel</button>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col">
-        <div className="overflow-x-auto flex-1 p-2">
-           <div className="space-y-3">
-              {displayData.map(p => {
-                const avg = calculateAvg(p.steps);
-                const isRejected = p.steps.some(s => s.reject);
-
-                return (
-                  <div key={p.id} className={`border rounded-xl p-4 relative overflow-hidden group shadow-sm transition-shadow hover:shadow-md ${p.type === 'recruitment' ? 'border-sky-200 bg-sky-50/30' : 'border-purple-200 bg-purple-50/30'}`}>
-                     <div className={`absolute top-0 left-0 w-1.5 h-full ${p.type === 'recruitment' ? 'bg-sky-500' : 'bg-purple-500'}`}></div>
-                     
-                     <div className="flex justify-between items-start pl-2 mb-3 border-b border-slate-200/50 pb-3">
-                        <div>
-                           <div className="flex items-center gap-2 mb-1">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${p.type === 'recruitment' ? 'bg-sky-100 text-sky-800 border border-sky-200' : 'bg-purple-100 text-purple-800 border border-purple-200'}`}>{p.type}</span>
-                              <span className="text-xs text-slate-400">Created: {p.creationDate}</span>
-                           </div>
-                           <h3 className="text-lg font-bold text-slate-800">{p.name} <span className="text-sm font-medium text-slate-500 ml-1">({p.rank})</span></h3>
-                        </div>
-                        <div className="flex items-center gap-4">
-                           <div className={`px-3 py-1.5 rounded-lg border font-bold text-sm shadow-sm flex flex-col items-center leading-tight min-w-[70px] ${getAvgColor(avg)}`}>
-                             <span className="text-[10px] font-semibold opacity-80 mb-0.5">AVG. SCORE</span>
-                             {avg}
-                           </div>
-                           
-                           {tab === 'active' && currentUser.role !== 'viewer' ? (
-                              <div className="flex gap-2">
-                                <button onClick={() => setEditModal(p)} className="bg-white hover:bg-slate-50 text-blue-600 px-3 py-1.5 rounded border border-slate-200 font-bold text-xs shadow-sm transition-colors">Evaluate</button>
-                                {['admin', 'crewing'].includes(currentUser.role) && (
-                                  <button onClick={() => onUpdate(p.id, 'status', 'archived')} className="bg-white hover:bg-slate-50 text-emerald-600 px-3 py-1.5 rounded border border-slate-200 font-bold text-xs shadow-sm transition-colors" title="Complete Process">Complete</button>
-                                )}
-                                {currentUser.role === 'admin' && (
-                                  <button onClick={() => setDeleteConfirmId(p.id)} className="bg-white hover:bg-slate-50 text-slate-400 hover:text-red-500 px-2 py-1.5 rounded border border-slate-200 transition-colors shadow-sm"><Trash2 size={16}/></button>
-                                )}
-                              </div>
-                           ) : (
-                              <div className="flex items-center">
-                                 {currentUser.role === 'admin' && <button onClick={() => onUpdate(p.id, 'status', 'active')} className="text-slate-400 hover:text-blue-500 flex items-center gap-1 text-xs font-medium mr-3"><RotateCcw size={14}/> Restore</button>}
-                                 <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded uppercase tracking-wide">Archived</span>
-                              </div>
-                           )}
-                        </div>
-                     </div>
-
-                     <div className="pl-2 flex flex-wrap gap-2">
-                        {p.steps.map((step, idx) => (
-                           <div key={idx} className={`flex-1 min-w-[200px] border rounded-lg p-2.5 flex flex-col gap-1.5 bg-white shadow-sm ${step.reject ? 'border-red-300 bg-red-50/50' : 'border-slate-200'}`}>
-                              <div className="flex justify-between items-center border-b border-slate-100 pb-1.5">
-                                <span className="font-bold text-slate-700 text-xs">{idx+1}. {step.role}</span>
-                                {step.date && <span className="text-[10px] text-slate-400">{step.date}</span>}
-                              </div>
-                              
-                              {step.reject ? (
-                                <div className="text-red-600 font-bold text-xs flex items-center gap-1 justify-center py-2 bg-red-100 rounded border border-red-200"><X size={14}/> DIRECT REJECT</div>
-                              ) : (
-                                <div className="flex items-center justify-between mt-1">
-                                  {step.note ? (
-                                     <button className="text-blue-500 cursor-help opacity-70 hover:opacity-100 text-[11px] font-medium flex items-center gap-1" title={step.note}><Info size={12} /> View Note</button>
-                                  ) : <span className="text-[10px] text-slate-300 italic">No notes</span>}
-                                  
-                                  <span className={`px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-700`}>
-                                     {step.score ? `${step.score}/100` : '-'}
-                                  </span>
-                                </div>
-                              )}
-                           </div>
-                        ))}
-                     </div>
-                  </div>
-                );
-              })}
-              {displayData.length === 0 && <div className="text-center py-20 text-slate-400">No records found.</div>}
-           </div>
-        </div>
-      </div>
-
-      {addModal && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
-            <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">Add Candidate</h2>
-            <div className="space-y-4">
-               <div>
-                 <label className="block text-sm font-medium text-slate-700 mb-1">Process Type</label>
-                 <select value={newPromo.type} onChange={e=>setNewPromo({...newPromo, type: e.target.value})} className="w-full border border-slate-300 rounded p-2 text-sm bg-white outline-none">
-                    <option value="recruitment">Recruitment (External)</option>
-                    <option value="promotion">Promotion (Internal)</option>
-                 </select>
-               </div>
-               <div>
-                 <label className="block text-sm font-medium text-slate-700 mb-1">Candidate Name</label>
-                 <input type="text" value={newPromo.name} onChange={e=>setNewPromo({...newPromo, name: e.target.value})} className="w-full border border-slate-300 rounded p-2 text-sm outline-none"/>
-               </div>
-               <div>
-                 <label className="block text-sm font-medium text-slate-700 mb-1">Target Rank</label>
-                 <select value={newPromo.rank} onChange={e=>setNewPromo({...newPromo, rank: e.target.value})} className="w-full border border-slate-300 rounded p-2 text-sm bg-white outline-none">
-                    <option value="">-- Select Rank --</option>
-                    {ranks.map(m => <option key={m.id} value={m.rank}>{m.rank}</option>)}
-                 </select>
-                 <p className="text-[10px] text-slate-400 mt-1">Approval steps will be generated automatically based on Settings.</p>
-               </div>
-            </div>
-            <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-slate-100">
-              <button onClick={()=>setAddModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium">Cancel</button>
-              <button onClick={handleCreate} disabled={!newPromo.name || !newPromo.rank} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold shadow-sm disabled:opacity-50">Create Process</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {editModal && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
-          <div className="bg-slate-50 rounded-xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-4 border-b border-slate-200 bg-white flex justify-between items-center shrink-0 shadow-sm z-10">
-               <div>
-                  <div className="flex items-center gap-2 mb-1">
-                     <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">{editModal.type}</span>
-                  </div>
-                  <h2 className="text-xl font-bold text-slate-800">{editModal.name} <span className="text-sm font-medium text-slate-500">({editModal.rank})</span></h2>
-               </div>
-               <button onClick={()=>setEditModal(null)} className="text-slate-400 hover:text-slate-600 bg-slate-100 p-1.5 rounded shadow-sm border border-slate-200"><X size={20}/></button>
-            </div>
-            
-            <div className="p-4 overflow-y-auto flex-1 bg-slate-100/50">
-               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                 {editModal.steps.map((step, idx) => {
-                   // Güvenlik ve Yetkilendirme Kontrolü
-                   const isAdminOrCTO = currentUser.role === 'admin' || currentUser.jobTitle === 'CTO';
-                   const isMyStep = currentUser.jobTitle === step.role;
-                   const canEdit = isAdminOrCTO || isMyStep;
-
-                   return (
-                     <div key={idx} className={`bg-white p-4 rounded-xl border shadow-sm relative ${step.reject ? 'border-red-300' : canEdit ? 'border-blue-300 ring-1 ring-blue-100' : 'border-slate-200 opacity-80'}`}>
-                       {!canEdit && <div className="absolute top-2 right-2 text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">READ ONLY</div>}
-                       
-                       <div className="font-black text-slate-800 text-sm mb-3 flex items-center gap-2 border-b border-slate-100 pb-2">
-                          <span className="bg-slate-800 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs">{idx+1}</span> 
-                          {step.role}
-                       </div>
-                       
-                       <div className="space-y-3">
-                         <div>
-                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Evaluation Date</label>
-                           <input type="date" disabled={!canEdit} value={step.date || ''} onChange={e=>{
-                             onUpdateStep(editModal.id, idx, 'date', e.target.value);
-                             const nm = {...editModal}; nm.steps[idx].date = e.target.value; setEditModal(nm);
-                           }} className="w-full border border-slate-300 rounded p-1.5 text-sm outline-none bg-slate-50 disabled:bg-slate-100"/>
-                         </div>
-                         
-                         <div>
-                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Notes</label>
-                           <textarea disabled={!canEdit} placeholder="Enter comments..." value={step.note || ''} onChange={e=>{
-                             onUpdateStep(editModal.id, idx, 'note', e.target.value);
-                             const nm = {...editModal}; nm.steps[idx].note = e.target.value; setEditModal(nm);
-                           }} className="w-full border border-slate-300 rounded p-2 text-sm outline-none resize-none h-16 bg-slate-50 disabled:bg-slate-100"/>
-                         </div>
-                         
-                         <div className="flex gap-3">
-                            <div className="flex-1">
-                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Score (0-100)</label>
-                              <input type="number" max="100" min="0" disabled={!canEdit || step.reject} value={step.score || ''} onChange={e=>{
-                                onUpdateStep(editModal.id, idx, 'score', e.target.value);
-                                const nm = {...editModal}; nm.steps[idx].score = e.target.value; setEditModal(nm);
-                              }} className="w-full border border-slate-300 rounded p-1.5 text-sm outline-none font-bold text-blue-600 bg-slate-50 disabled:bg-slate-100 text-center"/>
-                            </div>
-                            <div className="flex-1 flex flex-col items-center justify-center border border-red-200 rounded bg-red-50/50 mt-4 cursor-pointer">
-                              <label className={`flex items-center gap-1.5 text-xs font-bold cursor-pointer w-full h-full justify-center p-1 rounded transition-colors ${step.reject ? 'text-white bg-red-500' : 'text-red-500 hover:bg-red-100'}`}>
-                                <input type="checkbox" disabled={!canEdit} checked={step.reject || false} onChange={e=>{
-                                   const isRej = e.target.checked;
-                                   onUpdateStep(editModal.id, idx, 'reject', isRej);
-                                   if(isRej) onUpdateStep(editModal.id, idx, 'score', ''); // Clear score if rejected
-                                   const nm = {...editModal}; nm.steps[idx].reject = isRej; if(isRej) nm.steps[idx].score=''; setEditModal(nm);
-                                }} className="hidden"/>
-                                <X size={14} strokeWidth={3}/> DIRECT REJECT
-                              </label>
-                            </div>
-                         </div>
-                       </div>
-                     </div>
-                   );
-                 })}
-               </div>
-            </div>
-            
-            <div className="p-4 border-t border-slate-200 bg-white flex justify-end shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-                <button onClick={()=>setEditModal(null)} className="px-8 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-bold shadow-sm transition-colors">Close / Done</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {deleteConfirmId && (
-        <DeleteConfirmModal 
-          message="Are you sure you want to permanently delete this record?" 
-          showConfirm={true} 
-          onClose={() => setDeleteConfirmId(null)} 
-          onConfirm={() => { onDelete(deleteConfirmId); setDeleteConfirmId(null); }} 
-        />
-      )}
-    </div>
-  );
-}
-
 
 function FleetOverview({ ships, crew, today }) {
   return (
@@ -2617,6 +2297,86 @@ function FleetOverview({ ships, crew, today }) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function Login({ users, onLogin, isDbEmpty, onSeed }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [seeding, setSeeding] = useState(false);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const user = users.find(u => u.username === username && u.password === password);
+    if (user) {
+      onLogin(user);
+    } else {
+      setError('Invalid username or password.');
+    }
+  };
+
+  const handleInitialize = async () => {
+    setSeeding(true);
+    try {
+      const result = await onSeed();
+      if (result && !result.success) {
+        setError(`Database Initialization Failed: ${result.error}. Please check your Firebase Firestore Security Rules and enable Anonymous Authentication.`);
+      }
+    } catch (err) {
+      setError(`Unexpected Error: ${err.message}`);
+    }
+    setSeeding(false);
+  };
+
+  return (
+    <div className="flex h-screen bg-[#0f172a] items-center justify-center font-sans text-slate-800 p-4">
+      <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-100">
+        <div className="flex flex-col items-center mb-8">
+          <div className="bg-[#0f172a] p-3.5 rounded-2xl mb-4 shadow-lg shadow-slate-900/30">
+             <ArmonaLogo className="w-10 h-10" />
+          </div>
+          <h1 className="text-2xl font-black text-slate-800 tracking-wide text-center">ARMONA CREW MANAGER</h1>
+          <p className="text-slate-500 text-sm mt-1.5 font-medium">Please sign in to your account</p>
+        </div>
+
+        {isDbEmpty ? (
+           <div className="space-y-4 text-center">
+              <div className="bg-amber-50 text-amber-700 p-4 rounded-lg border border-amber-200 text-sm">
+                 <AlertTriangle size={24} className="mx-auto mb-2 text-amber-500"/>
+                 <strong>Database is empty!</strong><br/>
+                 Click the button below to initialize the default Admin account and configuration.
+              </div>
+              
+              {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-xs font-medium border border-red-200 text-left">{error}</div>}
+
+              <button onClick={handleInitialize} disabled={seeding} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition-colors shadow-sm disabled:opacity-50">
+                 {seeding ? 'Initializing Database...' : 'Initialize First Run Data'}
+              </button>
+           </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-medium border border-red-200 flex items-center justify-center gap-2"><AlertTriangle size={16}/> {error}</div>}
+            
+            <div>
+              <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Username</label>
+              <input type="text" value={username} onChange={e=>setUsername(e.target.value)} className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all bg-slate-50 focus:bg-white font-medium" required />
+            </div>
+            
+            <div>
+              <label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Password</label>
+              <input type="password" value={password} onChange={e=>setPassword(e.target.value)} className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all bg-slate-50 focus:bg-white font-medium" required />
+            </div>
+
+            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-3 rounded-lg transition-colors mt-2 shadow-sm">Secure Sign In</button>
+          </form>
+        )}
+        
+        <div className="mt-8 text-center text-xs text-slate-400 font-medium">
+          Custom Crewing Software <br/> designed by Batuhan Tas
+        </div>
       </div>
     </div>
   );
