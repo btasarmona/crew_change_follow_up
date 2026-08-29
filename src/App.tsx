@@ -110,14 +110,14 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   
   // Realtime Firebase States
-  const [ships, setShips] = useState([]);
-  const [crew, setCrew] = useState([]);
-  const [matrix, setMatrix] = useState([]);
   const [procSchema, setProcSchema] = useState([]);
   const [procedures, setProcedures] = useState([]);
   const [evaluations, setEvaluations] = useState([]);
   const [debriefings, setDebriefings] = useState([]);
   const [users, setUsers] = useState([]);
+  const [promoMatrix, setPromoMatrix] = useState([]); 
+  const [debriefMatrix, setDebriefMatrix] = useState([]); 
+  const [promotions, setPromotions] = useState([]);
 
   const [promoMatrix, setPromoMatrix] = useState([]); 
   const [promotions, setPromotions] = useState([]);
@@ -172,9 +172,11 @@ export default function App() {
     const unsubPromoMat = onSnapshot(doc(db, getPath('settings'), 'promo_matrix'), snap => {
       if(snap.exists()) setPromoMatrix(snap.data().items || []);
     }, console.error);
+    const unsubDebriefMat = onSnapshot(doc(db, getPath('settings'), 'debrief_matrix'), snap => {
+      if(snap.exists()) setDebriefMatrix(snap.data().items || []);
+    }, console.error);
 
-    return () => { unsubShips(); unsubCrew(); unsubProcs(); unsubEvals(); unsubDebriefs(); unsubPromos(); unsubUsers(); unsubMatrix(); unsubSchema(); unsubPromoMat(); };
-  }, [fbUser]);
+    return () => { unsubShips(); unsubCrew(); unsubProcs(); unsubEvals(); unsubDebriefs(); unsubPromos(); unsubUsers(); unsubMatrix(); unsubSchema(); unsubPromoMat(); unsubDebriefMat(); };
 
   // --- FIREBASE ACTIONS ---
   
@@ -361,7 +363,7 @@ export default function App() {
           <TopNavItem icon={<Briefcase />} label="Promo & Recruit" active={activeTab === 'promotions'} onClick={() => setActiveTab('promotions')} />
           {currentUser.role === 'admin' && <TopNavItem icon={<Settings />} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />}
         </nav>
-        
+
         <div className="flex items-center gap-4 border-l border-slate-700 pl-6 shrink-0">
           <div className="flex items-center gap-2 text-sm text-slate-300">
             <span>Hi, <strong className="text-white">{currentUser.username}</strong></span>
@@ -390,8 +392,7 @@ export default function App() {
           )}
           {activeTab === 'procedures' && currentUser.role !== 'viewer' && (
             <Procedures 
-              procedures={procedures} schema={procSchema} currentUser={currentUser}
-              onUpdateProc={async (id, field, val) => await updateDoc(doc(db, getPath('procedures'), id), { [field]: val })}
+            procedures={procedures} schema={procSchema} currentUser={currentUser} debriefMatrix={debriefMatrix}              onUpdateProc={async (id, field, val) => await updateDoc(doc(db, getPath('procedures'), id), { [field]: val })}
               onUpdateDynamic={async (id, field, val) => {
                  const p = procedures.find(x=>x.id === id);
                  if(p) await updateDoc(doc(db, getPath('procedures'), id), { dynamicData: {...p.dynamicData, [field]: val} });
@@ -402,14 +403,14 @@ export default function App() {
                 setActiveTab('eval_add'); 
                 await updateDoc(doc(db, getPath('procedures'), proc.id), { evaluationDone: true });
               }}
-              onAddDebrief={async (proc) => {
+              onAddDebrief={(proc) => {
                 const newDebrief = { 
-                  crewName: proc.crewName, shipName: proc.shipName, rank: proc.rank, 
+                  id: generateId(), crewName: proc.crewName, shipName: proc.shipName, rank: proc.rank, 
                   signOffDate: proc.date, startDate: '', endDate: '', status: 'active', 
-                  depts: [{name:'Deck', note:'', score:''},{name:'Engine', note:'', score:''},{name:'Safety', note:'', score:''},{name:'HR', note:'', score:''}] 
+                  depts: debriefMatrix.map(m => ({ name: m.name, note: '', score: '' }))
                 };
-                await setDoc(doc(db, getPath('debriefings'), generateId()), newDebrief);
-                await updateDoc(doc(db, getPath('procedures'), proc.id), { debriefDone: true });
+                setDoc(doc(db, getPath('debriefings'), newDebrief.id), newDebrief);
+                updateDoc(doc(db, getPath('procedures'), proc.id), { debriefDone: true });
                 setActiveTab('debriefings');
               }}
             />
@@ -452,7 +453,8 @@ export default function App() {
           
           {activeTab === 'debriefings' && (
              <Debriefings 
-               debriefings={debriefings} currentUser={currentUser} exportToCSV={exportToCSV}
+               debriefings={debriefings} currentUser={currentUser} debriefMatrix={debriefMatrix}
+                exportToCSV={exportToCSV}
                ships={ships} matrix={matrix}
                onManualAdd={async (data) => {
                  const newDebrief = { 
@@ -478,6 +480,7 @@ export default function App() {
               matrix={matrix} setMatrix={async (nm) => await setDoc(doc(db, getPath('settings'), 'rank_matrix'), { items: nm })} 
               procSchema={procSchema} setProcSchema={async (ns) => await setDoc(doc(db, getPath('settings'), 'proc_schema'), { items: ns })} 
               promoMatrix={promoMatrix} setPromoMatrix={async (pm) => await setDoc(doc(db, getPath('settings'), 'promo_matrix'), { items: pm })}
+              debriefMatrix={debriefMatrix} setDebriefMatrix={async (dm) => await setDoc(doc(db, getPath('settings'), 'debrief_matrix'), { items: dm })}
               users={users}
               onAddUser={async (u) => await setDoc(doc(db, getPath('appUsers'), u.id), u)}
               onUpdateUser={async (u) => await updateDoc(doc(db, getPath('appUsers'), u.id), u)}
@@ -1099,7 +1102,7 @@ function EditContractModal({ crewMember, onClose, onConfirm }) {
   );
 }
 
-function Procedures({ procedures, schema, currentUser, onUpdateProc, onUpdateDynamic, onAddEval, onAddDebrief, onDeleteProc }) {
+function Procedures({ procedures, schema, debriefMatrix, currentUser, onUpdateProc, onUpdateDynamic, onAddEval, onAddDebrief }) {
   const [tab, setTab] = useState('active'); 
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   
@@ -1441,7 +1444,7 @@ function EvaluationsAdd({ currentUser, crew, ships, prefillData, today, onAdd, o
   );
 }
 
-function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelete, exportToCSV, ships, matrix, onManualAdd }) {
+function Debriefings({ debriefings, debriefMatrix, currentUser, onUpdate }) {
   const [tab, setTab] = useState('active');
   const [editModal, setEditModal] = useState(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
@@ -1566,10 +1569,7 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelet
                 <th className="px-4 py-3 font-semibold">Sign-off Date</th>
                 <th className="px-4 py-3 font-semibold">Crew Info</th>
                 <th className="px-4 py-3 font-semibold">Vessel</th>
-                <th className="px-4 py-3 font-semibold">Deck</th>
-                <th className="px-4 py-3 font-semibold">Engine</th>
-                <th className="px-4 py-3 font-semibold">Safety</th>
-                <th className="px-4 py-3 font-semibold">HR</th>
+                {debriefMatrix.map(m => <th key={m.id || m.name} className="px-4 py-3 font-semibold">{m.name}</th>)}
                 <th className="px-4 py-3 font-semibold text-center border-l border-slate-200">Avg</th>
                 <th className="px-4 py-3 font-semibold text-right">Actions</th>
               </tr>
@@ -1588,12 +1588,10 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelet
                       <div className="text-[11px] text-slate-500">{d.rank}</div>
                     </td>
                     <td className="px-4 py-3 text-slate-600">{d.shipName}</td>
-                    
-                    <td className="px-4 py-3"><DeptCell dept={d.depts[0]} /></td>
-                    <td className="px-4 py-3"><DeptCell dept={d.depts[1]} /></td>
-                    <td className="px-4 py-3"><DeptCell dept={d.depts[2]} /></td>
-                    <td className="px-4 py-3"><DeptCell dept={d.depts[3]} /></td>
-                    
+                    {debriefMatrix.map(m => {
+                      const found = d.depts?.find(x => x.name === m.name) || { score: '', note: '' };
+                      return <td key={m.id || m.name} className="px-4 py-3"><DeptCell dept={found} /></td>;
+                    })}
                     <td className="px-4 py-3 text-center border-l border-slate-100">
                       <span className={`bg-slate-100 px-2 py-1 rounded font-bold ${isAvgLow ? 'text-red-600' : 'text-slate-700'}`}>{avg || '-'}</span>
                     </td>
@@ -1662,22 +1660,23 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelet
                </div>
                
                <div className="space-y-3">
-                 {editModal.depts.map((dept, idx) => {
+                 {debriefMatrix.map((matrixDept, idx) => {
+                   const deptData = editModal.depts?.find(x => x.name === matrixDept.name) || { name: matrixDept.name, note: '', score: '' };
                    const isAdminOrCTO = currentUser.role === 'admin' || currentUser.jobTitle === 'CTO';
-                   const canEdit = isAdminOrCTO || 
-                     (dept.name === 'Deck' && ['Marine S.I.', 'Marine Manager'].includes(currentUser.jobTitle)) ||
-                     (dept.name === 'Engine' && ['Tech S.I.', 'Tech. Manager'].includes(currentUser.jobTitle)) ||
-                     (dept.name === 'Safety' && currentUser.jobTitle === 'DPA') ||
-                     (dept.name === 'HR' && ['Crew Manager', 'Welfare Officer', 'Crewing S.I.'].includes(currentUser.jobTitle));
+                   const canEdit = isAdminOrCTO || (matrixDept.allowedRoles || []).includes(currentUser.jobTitle);
 
                    return (
                      <div key={idx} className={`bg-white p-3 rounded-lg border shadow-sm flex gap-3 items-start ${canEdit ? 'border-blue-200' : 'border-slate-200 opacity-80'}`}>
-                       <div className="w-24 shrink-0 font-bold text-slate-700 text-sm mt-1">{dept.name}</div>
+                       <div className="w-24 shrink-0 font-bold text-slate-700 text-sm mt-1">{matrixDept.name}</div>
                        <textarea 
                          disabled={!canEdit}
                          placeholder={canEdit ? "Enter detailed notes..." : "Read only..."}
-                         value={dept.note} onChange={e=>{
-                           const newDepts = [...editModal.depts]; newDepts[idx].note = e.target.value; setEditModal({...editModal, depts: newDepts});
+                         value={deptData.note} onChange={e=>{
+                           const newDepts = [...(editModal.depts || [])]; 
+                           const existingIdx = newDepts.findIndex(x => x.name === matrixDept.name);
+                           if(existingIdx > -1) newDepts[existingIdx].note = e.target.value;
+                           else newDepts.push({ name: matrixDept.name, note: e.target.value, score: deptData.score });
+                           setEditModal({...editModal, depts: newDepts});
                          }} 
                          className="flex-1 border border-slate-300 rounded p-2 text-sm resize-none focus:outline-none focus:border-blue-500 h-16 bg-slate-50 disabled:bg-slate-100"
                        />
@@ -1685,8 +1684,12 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelet
                          <input 
                            disabled={!canEdit}
                            type="number" placeholder="Score" max="100" min="0" 
-                           value={dept.score} onChange={e=>{
-                             const newDepts = [...editModal.depts]; newDepts[idx].score = e.target.value; setEditModal({...editModal, depts: newDepts});
+                           value={deptData.score} onChange={e=>{
+                             const newDepts = [...(editModal.depts || [])]; 
+                             const existingIdx = newDepts.findIndex(x => x.name === matrixDept.name);
+                             if(existingIdx > -1) newDepts[existingIdx].score = e.target.value;
+                             else newDepts.push({ name: matrixDept.name, note: deptData.note, score: e.target.value });
+                             setEditModal({...editModal, depts: newDepts});
                            }} 
                            className="w-full border border-slate-300 rounded p-2 text-sm font-bold text-blue-600 focus:outline-none focus:border-blue-500 text-center bg-slate-50 disabled:bg-slate-100"
                          />
@@ -1703,10 +1706,8 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelet
                 <button onClick={() => {
                   onUpdate(editModal.id, 'startDate', editModal.startDate);
                   onUpdate(editModal.id, 'endDate', editModal.endDate);
-                  editModal.depts.forEach((d, i) => {
-                    onUpdateDept(editModal.id, i, 'note', d.note);
-                    onUpdateDept(editModal.id, i, 'score', d.score);
-                  });
+                  // Tüm departmanları tek bir dizi olarak kaydet (çok daha performanslı)
+                  onUpdate(editModal.id, 'depts', editModal.depts);
                   setEditModal(null);
                 }} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold shadow-sm">Save Changes</button>
               </div>
@@ -1760,12 +1761,13 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelet
     );
   }
 
-  function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, promoMatrix, setPromoMatrix, users, onAddUser, onUpdateUser, onDeleteUser, ships, onAddShip, onUpdateShip, onDeleteShip, currentUser, setCurrentUser }) {
+  function SettingsPage({ matrix, setMatrix, procSchema, setProcSchema, promoMatrix, setPromoMatrix, debriefMatrix, setDebriefMatrix, users, onAddUser, onUpdateUser, onDeleteUser, ships, onAddShip, onUpdateShip, onDeleteShip, currentUser, setCurrentUser }) {
     const [newCol, setNewCol] = useState({ name: '', type: 'checkbox', appliesTo: 'both' });
     const [newRank, setNewRank] = useState({ rank: '', dept: 'Deck', checkOverlap: false, competencies: [] });
     const [newCompText, setNewCompText] = useState({});
     const [newUser, setNewUser] = useState({ username: '', password: '', role: 'viewer', jobTitle: 'Crew Manager' });
     const [newPromoRow, setNewPromoRow] = useState({ rank: '', steps: [] });
+    const [newDebriefRow, setNewDebriefRow] = useState({ name: '', allowedRoles: [] });
   const [newShip, setNewShip] = useState({ name: '', flag: 'TBA', minSafeManning: 10, cabinCapacity: 15, lsaCapacity: 20, color: 'blue' });
 
   // Edit States
@@ -1825,6 +1827,12 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelet
     if(!newPromoRow.rank) return;
     setPromoMatrix([...(promoMatrix||[]), { id: 'pm'+Date.now(), rank: newPromoRow.rank, steps: newPromoRow.steps }]);
     setNewPromoRow({ rank: '', steps: [] });
+  };
+
+  const addDebriefRow = () => {
+    if(!newDebriefRow.name) return;
+    setDebriefMatrix([...(debriefMatrix||[]), { id: 'dm'+Date.now(), name: newDebriefRow.name, allowedRoles: newDebriefRow.allowedRoles }]);
+    setNewDebriefRow({ name: '', allowedRoles: [] });
   };
 
   const deleteUser = (id) => {
@@ -2148,14 +2156,63 @@ function Debriefings({ debriefings, currentUser, onUpdate, onUpdateDept, onDelet
                 <td className="p-3 text-right">
                   <button onClick={addPromoRow} disabled={!newPromoRow.rank} className="bg-purple-600 text-white px-3 py-1.5 rounded text-sm font-bold disabled:opacity-50">Add Rule</button>
                 </td>
+                </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 5. DEBRIEFING MATRIX */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <h2 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><UserCheck size={20} className="text-teal-500"/> Debriefing Departments & Access</h2>
+        <p className="text-sm text-slate-500 mb-4 bg-slate-50 p-3 rounded border border-slate-100">Define departments for Debriefings (e.g. Deck, Marine, Procurement) and select which Job Titles are authorized to evaluate them.</p>
+        
+        <div className="overflow-x-auto mb-4">
+          <table className="w-full text-sm text-left border border-slate-200 rounded-lg whitespace-nowrap bg-white">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+              <tr><th className="p-3 font-semibold w-48">Department Name</th><th className="p-3 font-semibold">Allowed Evaluators (Job Titles)</th><th className="p-3 text-right"></th></tr>
+            </thead>
+            <tbody>
+              {(debriefMatrix||[]).map((dm, i) => (
+                <tr key={dm.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                  <td className="p-3 font-bold text-slate-800">{dm.name}</td>
+                  <td className="p-3 flex gap-2 flex-wrap items-center">
+                    {(dm.allowedRoles||[]).map((role, j) => (
+                      <span key={j} className="bg-teal-100 text-teal-800 text-[11px] font-bold px-2 py-1 rounded border border-teal-200 flex items-center gap-1">
+                        {role} 
+                        <button onClick={()=>{
+                           const nm = [...debriefMatrix]; nm[i].allowedRoles.splice(j,1); setDebriefMatrix(nm);
+                        }} className="hover:text-red-500 ml-1"><X size={10}/></button>
+                      </span>
+                    ))}
+                    <div className="flex items-center ml-2 border border-teal-200 rounded overflow-hidden">
+                      <input list="jobTitlesList" id={`debrief-role-${i}`} placeholder="Add role..." className="text-xs p-1 outline-none bg-white border-none w-28"/>
+                      <button onClick={()=>{
+                         const el = document.getElementById(`debrief-role-${i}`);
+                         if(el.value) { const nm = [...debriefMatrix]; nm[i].allowedRoles.push(el.value); setDebriefMatrix(nm); el.value = ''; }
+                      }} className="bg-teal-50 hover:bg-teal-100 text-teal-700 px-2 py-1 font-bold text-xs border-l border-teal-200">+</button>
+                    </div>
+                  </td>
+                  <td className="p-3 text-right">
+                    <button onClick={()=>setDebriefMatrix(debriefMatrix.filter(x=>x.id!==dm.id))} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={16}/></button>
+                  </td>
+                </tr>
+              ))}
+              <tr className="bg-teal-50/50">
+                <td className="p-3">
+                  <input type="text" placeholder="e.g. Procurement" value={newDebriefRow.name} onChange={e=>setNewDebriefRow({...newDebriefRow, name: e.target.value})} className="w-full border border-teal-200 rounded p-1.5 text-sm bg-white outline-none"/>
+                </td>
+                <td className="p-3">
+                  <span className="text-xs text-teal-500 italic">Add department first, then add authorized roles.</span>
+                </td>
+                <td className="p-3 text-right">
+                  <button onClick={addDebriefRow} disabled={!newDebriefRow.name} className="bg-teal-600 text-white px-3 py-1.5 rounded text-sm font-bold disabled:opacity-50">Add Dept</button>
+                </td>
               </tr>
             </tbody>
           </table>
         </div>
       </div>
-    </div>
-  );
-}
 
 function CrewFormModal({ matrix, crewMember, onClose, onConfirm }) {
   const isEdit = !!crewMember;
