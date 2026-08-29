@@ -2529,7 +2529,7 @@ function PromotionsRecruitment({ promotions, matrix, ranks, currentUser, onAdd, 
              <button onClick={() => setTab('active')} className={`px-4 py-1 rounded transition-colors ${tab==='active'?'bg-white shadow text-slate-800':'text-slate-500 hover:text-slate-700'}`}>Active</button>
              <button onClick={() => setTab('archived')} className={`px-4 py-1 rounded transition-colors ${tab==='archived'?'bg-white shadow text-slate-800':'text-slate-500 hover:text-slate-700'}`}>Archived</button>
            </div>
-           {currentUser?.role !== 'viewer' && tab === 'active' && (
+           {['admin', 'crewing'].includes(currentUser?.role) && tab === 'active' && (
              <button onClick={() => setAddModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm font-bold shadow-sm flex items-center gap-1 transition-colors"><Plus size={16}/> New Candidate</button>
            )}
         </div>
